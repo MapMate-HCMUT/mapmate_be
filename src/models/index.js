@@ -1,7 +1,10 @@
-export { default as User } from './User.model.js';
+export { User, default as User } from './user.model.js';
+export { UserAchievement, default as UserAchievement } from './userAchievement.model.js';
+export { UserAvatar } from './userAvatar.model.js';
+export { XpTransaction } from './xpTransaction.model.js';
+export { Notification } from './notification.model.js';
 export { default as Place } from './Place.model.js';
 export { default as Itinerary } from './Itinerary.model.js';
 export { default as AiSession } from './AiSession.model.js';
 export { default as CommunityReport } from './CommunityReport.model.js';
 export { default as FloodAlert } from './FloodAlert.model.js';
-export { default as UserAchievement } from './UserAchievement.model.js';

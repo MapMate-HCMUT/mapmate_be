@@ -14,13 +14,13 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 
 // Import tất cả models
-import User from '../models/User.model.js';
+import User from '../models/user.model.js';
 import Place from '../models/Place.model.js';
 import Itinerary from '../models/Itinerary.model.js';
 import AiSession from '../models/AiSession.model.js';
 import CommunityReport from '../models/CommunityReport.model.js';
 import FloodAlert from '../models/FloodAlert.model.js';
-import UserAchievement from '../models/UserAchievement.model.js';
+import UserAchievement from '../models/userAchievement.model.js';
 
 const models = [
   { name: 'users', model: User },
