@@ -60,7 +60,7 @@ const floodAlertSchema = new mongoose.Schema(
     expires_at: {
       type: Date,
       required: true,
-      index: true,
+      // TTL Index được khai báo bên dưới qua schema.index()
     },
   },
   {

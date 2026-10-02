@@ -77,7 +77,7 @@ const communityReportSchema = new mongoose.Schema(
     expires_at: {
       type: Date,
       required: true,
-      index: true, // TTL Index sẽ dựa trên field này
+      // TTL Index được khai báo bên dưới qua schema.index()
     },
   },
   {
