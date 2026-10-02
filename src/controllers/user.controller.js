@@ -33,7 +33,7 @@ export const getMyHistory = asyncHandler(async (req, res) => {
 });
 
 export const getUserById = asyncHandler(async (req, res) => {
-  const data = await getPublicProfile(req.validated.params.id);
+  const data = await getPublicProfile(req.validated.params.id, req.user?.id);
   return sendSuccess(res, { message: 'Lấy hồ sơ thành công', data });
 });
 

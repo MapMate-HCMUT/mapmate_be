@@ -7,7 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
     "dev": "node --env-file=.env --watch src/server.js",
-    "seed:users": "node --env-file=.env src/scripts/seedDemoUsers.js"
+    "seed:users": "node --env-file=.env src/scripts/seedDemoUsers.js",
+    "seed:places": "node --env-file=.env src/scripts/seedPlaces.js",
+    "seed:social": "node --env-file=.env src/scripts/seedSocial.js"
   },
   "repository": {
     "type": "git",

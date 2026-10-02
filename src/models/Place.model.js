@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { DEFAULT_VISIT_MINUTES, PLACE_CATEGORY_VALUES, PLACE_TAG_VALUES } from '../constants/places.js';
+import { normalizeSearchText } from '../utils/text.js';
 
 const placeSchema = new mongoose.Schema(
   {
@@ -21,7 +23,7 @@ const placeSchema = new mongoose.Schema(
     category: {
       type: String,
       enum: {
-        values: ['food', 'cafe', 'hotel', 'attraction', 'shopping', 'transport', 'other'],
+        values: PLACE_CATEGORY_VALUES, // + 'entertainment' cho bộ lọc Giải trí
         message: 'Danh mục {VALUE} không hợp lệ',
       },
       default: 'other',
@@ -61,6 +63,39 @@ const placeSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+
+    // ── Bổ sung cho bộ lọc Khám phá & lên lộ trình ──
+    review_count: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Phong cách / dịp đi chơi: 'hen-ho', 'gia-dinh', 'song-ao'... (constants/places.js)
+    tags: {
+      type: [{ type: String, enum: PLACE_TAG_VALUES }],
+      default: [],
+    },
+    // Giờ mở cửa dạng "HH:mm". Để null = mở cả ngày. close < open = mở qua đêm.
+    opening_hours: {
+      open: { type: String, default: null },
+      close: { type: String, default: null },
+    },
+    // Thời gian ở lại trung bình (phút) — dùng để xếp lịch trình
+    avg_visit_minutes: {
+      type: Number,
+      default: DEFAULT_VISIT_MINUTES,
+      min: 10,
+    },
+    is_trending: {
+      type: Boolean,
+      default: false,
+    },
+    // Tên + địa chỉ + đặc sản đã bỏ dấu, viết thường — để tìm "pho hoa" ra "Phở Hòa"
+    search_text: {
+      type: String,
+      default: '',
+      select: false,
+    },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -72,6 +107,16 @@ const placeSchema = new mongoose.Schema(
 placeSchema.index({ location: '2dsphere' });
 // Index tìm kiếm theo danh mục + quận
 placeSchema.index({ category: 1, district: 1 });
+
+// Lọc theo phong cách
+placeSchema.index({ tags: 1 });
+
+export const buildPlaceSearchText = ({ name = '', address = '', district = '', specialties = [] }) =>
+  normalizeSearchText([name, address, district, ...specialties].join(' '));
+
+placeSchema.pre('save', function fillSearchText() {
+  this.search_text = buildPlaceSearchText(this);
+});
 
 const Place = mongoose.model('Place', placeSchema);
 export default Place;

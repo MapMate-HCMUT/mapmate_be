@@ -12,6 +12,8 @@ import {
   updateMe,
   uploadAvatar,
 } from '../controllers/user.controller.js';
+import { findUsers } from '../controllers/friend.controller.js';
+import { getUserPins } from '../controllers/pin.controller.js';
 import { optionalAuth, requireAuth } from '../middlewares/auth.middleware.js';
 import { authRateLimiter, geocodeRateLimiter } from '../middlewares/rateLimiter.js';
 import { validate } from '../middlewares/validate.middleware.js';
@@ -24,11 +26,13 @@ import {
   userIdParamSchema,
   xpHistoryQuerySchema,
 } from '../middlewares/validators/user.validator.js';
+import { userSearchQuerySchema } from '../middlewares/validators/social.validator.js';
 
 export const userRouter = Router();
 
 // Các route cố định phải khai báo trước /:id
 userRouter.get('/check-username', optionalAuth, validate({ query: checkUsernameQuerySchema }), checkUsername);
+userRouter.get('/search', requireAuth, validate({ query: userSearchQuerySchema }), findUsers);
 userRouter.get('/me', requireAuth, getMe);
 userRouter.patch('/me', requireAuth, validate({ body: updateProfileSchema }), updateMe);
 userRouter.patch('/me/password', requireAuth, authRateLimiter, validate({ body: changePasswordSchema }), changePassword);
@@ -43,4 +47,5 @@ userRouter.put(
 );
 userRouter.delete('/me/avatar', requireAuth, deleteAvatar);
 userRouter.get('/:id/avatar', validate({ params: userIdParamSchema }), getAvatar);
-userRouter.get('/:id', validate({ params: userIdParamSchema }), getUserById);
+userRouter.get('/:id/pins', validate({ params: userIdParamSchema }), getUserPins);
+userRouter.get('/:id', optionalAuth, validate({ params: userIdParamSchema }), getUserById);
