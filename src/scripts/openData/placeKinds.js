@@ -22,11 +22,12 @@ export const KINDS = {
   cinema: { category: 'entertainment', tags: ['may-lanh'], price: [80 * K, 150 * K], visit: 150 },
   theatre: { category: 'entertainment', tags: [], price: [100 * K, 400 * K], visit: 120 },
   games: { category: 'entertainment', tags: ['nhom-ban', 'may-lanh'], price: [80 * K, 200 * K], visit: 90 },
-  theme_park: { category: 'entertainment', tags: ['gia-dinh', 'ngoai-troi'], price: [100 * K, 300 * K], visit: 180 },
-  zoo: { category: 'attraction', tags: ['gia-dinh', 'ngoai-troi'], price: [50 * K, 150 * K], visit: 120 },
+  // Loại "Công viên": khu vui chơi (Suối Tiên, Đầm Sen), công viên nước, sở thú, công viên cây xanh
+  theme_park: { category: 'park', tags: ['gia-dinh', 'nhom-ban', 'ngoai-troi'], price: [100 * K, 300 * K], visit: 180 },
+  zoo: { category: 'park', tags: ['gia-dinh', 'ngoai-troi'], price: [50 * K, 150 * K], visit: 120 },
   museum: { category: 'attraction', tags: [], price: [20 * K, 60 * K], visit: 90 },
   gallery: { category: 'attraction', tags: ['song-ao', 'yen-tinh'], price: [0, 50 * K], visit: 60 },
-  park: { category: 'attraction', tags: ['ngoai-troi'], price: [0, 0], visit: 45 },
+  park: { category: 'park', tags: ['ngoai-troi'], price: [0, 0], visit: 45 },
   landmark: { category: 'attraction', tags: ['song-ao'], price: [0, 0], visit: 30 },
   worship: { category: 'attraction', tags: ['yen-tinh'], price: [0, 0], visit: 40 },
   mall: { category: 'shopping', tags: ['may-lanh'], price: [0, 300 * K], visit: 90 },
@@ -145,5 +146,5 @@ const BRAND_PRICES = [
 export const brandPrice = (name) => BRAND_PRICES.find(([pattern]) => pattern.test(name))?.[1] ?? null;
 
 // Tên rác: spam cá cược, chung cư bị gắn nhầm loại... (so trên tên viết thường, CÒN dấu)
-const JUNK_NAME = /kèo|k\.èo|nhà cái|cá cược|tài xỉu|nhận định|xổ số|lô đề|casino|\bbet\b|chung cư|căn hộ|apartment|khu dân cư|showroom|văn phòng|công ty|cho thuê|tin tức|\.com\b|\.net\b|dạy nghề|đào tạo|tuyển sinh|giáo xứ|giáo họ|vòng xoay|bùng binh|ngã (tư|ba|sáu|bảy)|tạp ho?á|bách ho?á xanh|đại lý|điểm đón|đón trả|bãi (giữ|đỗ) xe/i;
+const JUNK_NAME = /kèo|k\.èo|nhà cái|cá cược|tài xỉu|nhận định|xổ số|lô đề|casino|\bbet\b|chung cư|căn hộ|apartment|khu dân cư|showroom|văn phòng|công ty|cho thuê|tin tức|\.com\b|\.net\b|dạy nghề|đào tạo|tuyển sinh|giáo xứ|giáo họ|vòng xoay|bùng binh|ngã (tư|ba|sáu|bảy)|tạp ho?á|bách ho?á xanh|đại lý|điểm đón|đón trả|bãi (giữ|đỗ) xe|^metro\b|ga metro|bến xe|common area|bằng lái|học lái/i;
 export const isJunkName = (name) => !name || name.trim().length < 2 || JUNK_NAME.test(name);

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { DEFAULT_VISIT_MINUTES, PLACE_CATEGORY_VALUES, PLACE_TAG_VALUES } from '../constants/places.js';
+import { CLOSED_BY, DEFAULT_VISIT_MINUTES, PLACE_CATEGORY_VALUES, PLACE_STATUS, PLACE_STATUS_VALUES, PLACE_TAG_VALUES } from '../constants/places.js';
 import { PLACE_SOURCES, PLACE_SOURCE_VALUES } from '../constants/openData.js';
 import { normalizeSearchText } from '../utils/text.js';
 
@@ -143,6 +143,20 @@ const placeSchema = new mongoose.Schema(
       phone: { type: String, default: null },
       website: { type: String, default: null },
       facebook: { type: String, default: null },
+    },
+
+    // ── Còn hoạt động không (xem constants/places.js — PLACE_STATUS) ──
+    status: {
+      type: String,
+      enum: PLACE_STATUS_VALUES,
+      default: PLACE_STATUS.ACTIVE,
+    },
+    closed_by: { type: String, enum: [...Object.values(CLOSED_BY), null], default: null },
+    status_changed_at: { type: Date, default: null },
+    // Số người báo "đã đóng cửa" / "vẫn mở" (tính lại mỗi lần có người báo — collection place_reports)
+    report_counts: {
+      closed: { type: Number, default: 0 },
+      open: { type: Number, default: 0 },
     },
   },
   {

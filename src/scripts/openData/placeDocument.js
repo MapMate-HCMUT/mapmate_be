@@ -1,5 +1,6 @@
 // Bản ghi đã gộp -> document của collection `places`.
 import { buildPlaceSearchText } from '../../models/Place.model.js';
+import { PLACE_STATUS } from '../../constants/places.js';
 import { roundTo } from '../../utils/geo.js';
 import { isLateNight } from './openingHours.js';
 import { brandPrice, KINDS } from './placeKinds.js';
@@ -38,6 +39,8 @@ export const toPlaceDocument = (record) => {
   source.search_text = buildPlaceSearchText(source);
 
   const initial = {
+    status: PLACE_STATUS.ACTIVE, // sau đó do cộng đồng báo / lần nhập sau quyết định
+    report_counts: { closed: 0, open: 0 },
     rating: 0,
     review_count: 0,
     price_range: { min: priceMin, max: priceMax },
