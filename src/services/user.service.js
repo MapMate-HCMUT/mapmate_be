@@ -6,6 +6,7 @@ import { User } from '../models/user.model.js';
 import { XpTransaction } from '../models/xpTransaction.model.js';
 import { AppError } from '../utils/AppError.js';
 import { getLevelInfo } from '../utils/level.js';
+import { getRelationship } from './friend.service.js';
 import { getAchievementBoard, recordDailyActivity } from './gamification.service.js';
 import { clearLeaderboardCache, getAllTimeRank } from './leaderboard.service.js';
 import { notifyUser } from './notification.service.js';
@@ -68,10 +69,14 @@ const buildProfileView = async (user, options) => {
 export const getMyProfile = async (userId) => buildProfileView(await recordDailyActivity(userId));
 
 // GET /api/users/:id — hồ sơ công khai để chia sẻ / xem từ bảng xếp hạng (không có email).
-export const getPublicProfile = async (userId) => {
+export const getPublicProfile = async (userId, viewerId) => {
   const user = await User.findById(userId).lean();
   if (!user) throw userNotFound();
-  return buildProfileView(user, { isOwner: false });
+  const [view, relationship] = await Promise.all([
+    buildProfileView(user, { isOwner: false }),
+    viewerId ? getRelationship(viewerId, userId) : null, // để hiện nút Kết bạn / Bạn bè
+  ]);
+  return { ...view, relationship };
 };
 
 const isReservedUsername = (username) => RESERVED_USERNAMES.includes(username.toLowerCase());

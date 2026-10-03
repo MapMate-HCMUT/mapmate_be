@@ -88,3 +88,72 @@ Bảng điểm, level, huy hiệu cấu hình tại [src/constants/gamification.
 | `notifications` | Thông báo của từng người | `{ user_id, created_at }` · chưa đọc (partial) · TTL 90 ngày |
 | `user_avatars` | Ảnh đại diện tự tải lên (tách khỏi `users`) | `user_id` unique |
 | `xp_transactions` | Sổ cái XP (mỗi lần cộng điểm 1 dòng) | `{ user_id, created_at }` · `{ created_at, user_id, xp }` (covering cho leaderboard) · `{ user_id, action, ref_key }` unique |
+
+## Khám phá: Địa điểm & Lộ trình
+
+```bash
+npm run seed:places   # nạp 44 địa điểm mẫu tại TP.HCM (chạy lại được, không tạo trùng)
+npm run seed:social   # (tuỳ chọn) bạn bè, ghim, lộ trình, bài viết demo — cần seed:users + seed:places trước
+```
+
+| Method | Endpoint | Auth | Body / Query | `data` trả về |
+|---|---|---|---|---|
+| GET | `/api/places/filter-options` | — | — | Mọi lựa chọn của bộ lọc: `categories`, `tags`, `vehicles`, `sorts`, `price`, `districts`... |
+| GET | `/api/places/nearby` | Tuỳ chọn | `lat, lng, radius_km, categories, tags, price_min, price_max, min_rating, district, q, open_at, vehicle, sort (mặc định recommended), page, limit` | `{ items, total, total_capped, has_more }` (kèm `distance_km`, `travel_minutes`, `my_pin`, `source`, `hours_known`, `price_estimated`). Đếm tối đa 1.000 (`total_capped = true` => hiện "1.000+") |
+| GET | `/api/places/:id` | Tuỳ chọn | — | Chi tiết 1 địa điểm |
+| POST | `/api/itineraries/suggest` | Tuỳ chọn | `{ criteria, place_ids? }` | `{ criteria, candidate_count, options[≤3] }` — mỗi option có `stops[]` + `summary` |
+| POST | `/api/itineraries/preview` | — | `{ criteria, place_ids }` | `{ stops, summary }` cho đúng các điểm đang chọn |
+| POST | `/api/itineraries` | Bearer | `{ name, place_ids, vehicle, people, start_time, origin, criteria, tags, visibility }` | Lộ trình đã lưu |
+| GET | `/api/itineraries` | Bearer | — | `{ items }` |
+| GET | `/api/itineraries/:id` | Tuỳ chọn | — | Lộ trình (theo quyền xem) |
+| PATCH / DELETE | `/api/itineraries/:id` | Bearer | `{ name?, visibility?, tags?, status? }` | — |
+| POST | `/api/itineraries/:id/clone` | Bearer | — | Bản sao về tài khoản mình |
+
+- **`criteria` (tiêu chí chuyến đi)** = bộ lọc người dùng chọn: `origin, categories, tags, price_min, price_max (≤2.000k), trip_budget (50k–2.000k hoặc null), people, vehicle, transport_modes, radius_km, min_rating, start_time, duration_hours (1–12), open_only, district`. Được lưu trong `itineraries.criteria` → dùng làm đầu vào cho AI Planner. Schema: [itinerary.validator.js](src/middlewares/validators/itinerary.validator.js).
+- **Gợi ý lộ trình** ([itineraryPlanner.service.js](src/services/itineraryPlanner.service.js)): mỗi chiến lược (tiết kiệm / được yêu thích / gần nhất / cân bằng) chấm điểm địa điểm theo trọng số khác nhau → tối đa 3 lộ trình. Có xét ngân sách, giờ mở cửa, đa dạng loại hình. `place_ids` = các điểm người dùng tự chọn, luôn được giữ.
+- **Phương tiện** (`vehicle`): `bike`, `car`, `walk`, `public` (buýt + metro + đi bộ), `metro_grab` (metro + Grab xe máy), `custom` (tự chọn trong `transport_modes`: `bus`, `metro`, `grab_bike`, `grab_car`). Mỗi chặng, [utils/transport.js](src/utils/transport.js) so sánh các cách đi được phép (kể cả đi bộ/buýt/Grab tới ga metro) và chọn cách tốt nhất theo thời gian + chi phí.
+- **Bảng giá** nằm ở [constants/transport.js](src/constants/transport.js) (cập nhật 02/10/2026): Metro số 1 7.000–20.000đ/lượt theo quãng đường (ước tính trong khung giá), xe buýt miễn phí đến hết 31/12/2026 rồi 7.000–9.000đ từ 2027 (tự đổi theo ngày), Grab và xe cá nhân là giá tham khảo. Đổi giá chỉ cần sửa file này.
+- **`summary`** của mỗi lộ trình: `total_minutes`, `travel_minutes`, `visit_minutes`, `total_distance_km`, `places_cost_per_person`, `transport_cost_per_person`, `cost_per_person`, `total_cost`, `budget_left`, `time_left_minutes`, `within_budget`, `within_duration`, `avg_rating`, `all_open`, `transport[]` (theo từng phương tiện). Được lưu vào `itineraries.summary`.
+- Khoảng cách/thời gian là **ước lượng** (đường chim bay × 1.3, tốc độ trung bình từng phương tiện). Khi tích hợp Goong Directions / Distance Matrix chỉ cần thay hàm `planLeg` trong [utils/transport.js](src/utils/transport.js).
+- `Place` và `Itinerary` là model có sẵn, chỉ **thêm trường** (`tags`, `review_count`, `opening_hours`, `avg_visit_minutes`, `search_text`; `criteria`, `visibility`, `people`...) và thêm loại hình `entertainment`.
+
+## Dữ liệu địa điểm từ nguồn mở (Overture Maps + OpenStreetMap)
+
+~25.700 quán ăn, cà phê, điểm tham quan, giải trí, mua sắm ở TP.HCM — giấy phép cho phép **lưu vào DB** (khác Google Places), chỉ cần ghi nguồn (frontend đã hiện dưới danh sách).
+
+```bash
+pip install overturemaps            # 1 lần (Python ≥ 3.10) — công cụ tải chính thức của Overture
+npm run places:fetch-overture       # -> data/open/overture_hcmc.geojsonseq (~450 MB, ~30 giây)
+npm run places:fetch-osm            # -> data/open/osm_hcmc.json (~2 MB, qua Overpass API)
+npm run places:import -- --dry-run  # chỉ thống kê, KHÔNG ghi DB
+npm run places:import               # ghi vào `places` (~2 phút). Thêm --prune để xoá bản ghi cũ không còn trong nguồn
+```
+
+- Chạy `seed:places` **trước** để 44 địa điểm nhóm tự nhập được giữ nguyên (dữ liệu mở trùng tên sẽ bị bỏ qua).
+- Nhập lại nhiều lần được: cập nhật theo `source_ref`, **không ghi đè** `rating`, `review_count`, `price_range`, `is_trending` (để dành cho cộng đồng sửa). `--prune` không xoá nơi đang được ghim / đăng bài / có trong lộ trình.
+- Kết quả chi tiết của mỗi lần nhập: `data/open/import-report.json`. Thư mục `data/open/` không đưa lên git.
+- Trường mới của `Place`: `source` (`mapmate` / `overture` / `osm` / `community`), `source_ref`, `osm_ref`, `confidence`, `price_estimated`, `hours_known`, `cuisines`, `contact { phone, website, facebook }`.
+- Dữ liệu mở **không có đánh giá** (`rating = 0`, hiện "Chưa có đánh giá"), **giá là ước tính theo loại hình** (`price_estimated = true`), phần lớn **chưa rõ giờ** (`hours_known = false` — khác với `opening_hours = null` của dữ liệu nhóm nghĩa là mở cả ngày).
+- Code: [src/scripts/importOpenPlaces.js](src/scripts/importOpenPlaces.js) + [src/scripts/openData/](src/scripts/openData) (ánh xạ loại hình + giá ước tính ở `placeKinds.js`, gộp trùng ở `placeMerger.js`, chuẩn hoá quận ở `districts.js`).
+
+## Kết nối: Bạn bè, Bảng tin, Ghim
+
+| Method | Endpoint | Ghi chú |
+|---|---|---|
+| GET | `/api/friends` · `/api/friends/requests` · `/api/friends/suggestions` | Bạn bè · lời mời đến/đi · gợi ý |
+| POST | `/api/friends/requests` `{ user_id }` | Gửi lời mời (người kia đã mời trước → thành bạn luôn) |
+| POST | `/api/friends/requests/:id/accept` | Đồng ý |
+| DELETE | `/api/friends/requests/:id` · `/api/friends/:userId` | Từ chối / thu hồi · huỷ kết bạn |
+| GET | `/api/users/search?q=` | Tìm người theo username, kèm quan hệ |
+| GET | `/api/posts?scope=public\|friends\|mine&tag=&author_id=&place_id=&before=&limit=` | Bảng tin (cursor) |
+| GET | `/api/posts/trending-tags` · `/api/posts/:id` | Hashtag nổi bật 14 ngày · 1 bài viết |
+| POST | `/api/posts` `{ type: place\|itinerary\|text, content, place_id?, itinerary_id?, rating?, visited?, tags[], tagged_user_ids[], visibility }` | Đăng bài |
+| POST / DELETE | `/api/posts/:id/like` · `/api/posts/:id/repost` | Thích · đăng lại (chỉ bài công khai) |
+| POST | `/api/posts/:id/share` `{ friend_ids[], message }` | Gửi cho bạn bè (qua thông báo) |
+| DELETE | `/api/posts/:id` | Xoá bài của mình (xoá luôn các bài đăng lại) |
+| GET / PUT / DELETE | `/api/pins` · `/api/pins/:placeId` `{ status: visited\|wishlist, note?, rating?, visited_on? }` | Ghim địa điểm |
+| GET | `/api/users/:id/pins` | Những nơi 1 người đã đi (công khai) |
+
+- Quyền xem: bài `friends` chỉ tác giả + bạn bè thấy; không có quyền → trả 404. Chỉ gắn thẻ / gửi bài cho **bạn bè**.
+- Thông báo mới: lời mời kết bạn, được đồng ý, được gắn thẻ, bài được đăng lại, được chia sẻ bài viết.
+- Collection mới: `friendships` (unique `pair_key`), `posts`, `post_likes` (unique `{post_id, user_id}`), `place_pins` (unique `{user_id, place_id}`).

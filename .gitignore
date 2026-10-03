@@ -5,3 +5,5 @@ node_modules/
 dist/
 coverage/
 *.log
+# Dữ liệu mở tải về (Overture ~450 MB, OSM) — tải lại bằng npm run places:fetch-*
+data/open/
