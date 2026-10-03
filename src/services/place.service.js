@@ -172,6 +172,7 @@ export const toPlaceView = (place, { pin } = {}) => {
     price_estimated: Boolean(place.price_estimated),
     cuisines: place.cuisines ?? [],
     contact: place.contact ?? null,
+    image_url: place.image_url ?? null,
   };
   if (place.distance_m !== undefined) view.distance_km = roundTo(place.distance_m / METERS_PER_KM, 2);
   if (pin !== undefined) view.my_pin = pin;

@@ -64,6 +64,11 @@ const placeSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    image_url: {
+      type: String,
+      default: null,
+      trim: true,
+    },
 
     // ── Bổ sung cho bộ lọc Khám phá & lên lộ trình ──
     review_count: {
