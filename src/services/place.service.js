@@ -4,12 +4,16 @@ import {
   EXPLORE_CATEGORIES,
   MIN_RATING_PRESETS,
   PEOPLE_FILTER,
+  PLACE_COUNT_CAP,
   PLACE_SORTS,
   PLACE_TAGS,
+  PLANNER_CANDIDATES_PER_CATEGORY,
   PRICE_FILTER,
   RADIUS_FILTER,
+  RECOMMENDED_SORT_WEIGHTS,
   TRIP_BUDGET_FILTER,
 } from '../constants/places.js';
+import { OPEN_DATA_ATTRIBUTION, PLACE_SOURCES } from '../constants/openData.js';
 import {
   CUSTOM_MODE_VALUES,
   DEFAULT_CUSTOM_MODES,
@@ -36,11 +40,32 @@ const EXPLORE_CATEGORY_VALUES = EXPLORE_CATEGORIES.map((category) => category.va
 
 const SORT_STAGES = {
   rating: { rating: -1, review_count: -1 },
-  popular: { review_count: -1, rating: -1 },
+  popular: { review_count: -1, rating: -1, confidence: -1 },
   price_asc: { 'price_range.min': 1, rating: -1 },
 };
 
+// Điểm "Đề xuất" (constants/places.js): đã có đánh giá + biết giờ mở cửa + độ tin cậy + gần.
+const buildRecommendedRank = (radiusKm) => {
+  const weights = RECOMMENDED_SORT_WEIGHTS;
+  return {
+    $add: [
+      { $cond: [{ $gt: ['$review_count', 0] }, weights.reviewed, 0] },
+      { $cond: [{ $eq: ['$hours_known', false] }, 0, weights.hoursKnown] },
+      { $multiply: [{ $ifNull: ['$confidence', 1] }, weights.confidence] },
+      { $multiply: [{ $max: [0, { $subtract: [1, { $divide: ['$distance_m', radiusKm * METERS_PER_KM] }] }] }, weights.proximity] },
+    ],
+  };
+};
+const sortStages = (sort, radiusKm) => {
+  if (sort === 'recommended') return [{ $addFields: { _rank: buildRecommendedRank(radiusKm) } }, { $sort: { _rank: -1 } }];
+  return SORT_STAGES[sort] ? [{ $sort: SORT_STAGES[sort] }] : []; // 'distance': $geoNear đã xếp theo khoảng cách
+};
+
 const formatK = (amount) => `${amount.toLocaleString('vi-VN')}đ`;
+
+// "Quận 2" < "Quận 10" < "Bình Thạnh"... (số theo giá trị, sau đó tên theo bảng chữ cái tiếng Việt)
+const districtNumber = (name) => Number(name.match(/^Quận (\d+)$/)?.[1] ?? Infinity);
+const compareDistricts = (a, b) => districtNumber(a) - districtNumber(b) || a.localeCompare(b, 'vi');
 
 // Giá vé metro hiện hành để gợi ý cho người dùng (số liệu lấy từ constants/transport.js).
 // Chỉ hiện metro: xe buýt đang miễn phí; Grab / xe cá nhân vẫn được tính vào chi phí lộ trình nhưng không liệt kê ở đây.
@@ -76,7 +101,8 @@ export const getFilterOptions = async () => ({
   people: PEOPLE_FILTER,
   duration: DURATION_FILTER,
   min_ratings: MIN_RATING_PRESETS,
-  districts: await districtCache.wrap('districts', async () => (await Place.distinct('district')).filter(Boolean).sort()),
+  districts: await districtCache.wrap('districts', async () => (await Place.distinct('district')).filter(Boolean).sort(compareDistricts)),
+  attribution: Object.values(OPEN_DATA_ATTRIBUTION), // bắt buộc hiển thị khi dùng dữ liệu OSM / Overture
   defaults: { origin: DEFAULT_ORIGIN, vehicle: DEFAULT_VEHICLE, duration_hours: DURATION_FILTER.default, custom_modes: DEFAULT_CUSTOM_MODES },
 });
 
@@ -139,8 +165,13 @@ export const toPlaceView = (place, { pin } = {}) => {
     tags: place.tags ?? [],
     specialties: place.specialties ?? [],
     opening_hours: place.opening_hours?.open ? place.opening_hours : null,
+    hours_known: place.hours_known !== false, // false => opening_hours = null nghĩa là CHƯA RÕ, không phải mở cả ngày
     avg_visit_minutes: place.avg_visit_minutes,
     is_trending: Boolean(place.is_trending),
+    source: place.source ?? PLACE_SOURCES.MAPMATE,
+    price_estimated: Boolean(place.price_estimated),
+    cuisines: place.cuisines ?? [],
+    contact: place.contact ?? null,
   };
   if (place.distance_m !== undefined) view.distance_km = roundTo(place.distance_m / METERS_PER_KM, 2);
   if (pin !== undefined) view.my_pin = pin;
@@ -161,17 +192,14 @@ export const searchPlaces = async (filters, userId) => {
     ...buildNearbyPipeline(filters),
     {
       $facet: {
-        items: [
-          ...(SORT_STAGES[sort] ? [{ $sort: SORT_STAGES[sort] }] : []), // mặc định $geoNear đã xếp theo khoảng cách
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
-        ],
-        total: [{ $count: 'count' }],
+        items: [...sortStages(sort, filters.radius_km ?? RADIUS_FILTER.default), { $skip: (page - 1) * limit }, { $limit: limit }],
+        total: [{ $limit: PLACE_COUNT_CAP + 1 }, { $count: 'count' }],
       },
     },
   ]);
 
-  const total = result.total[0]?.count ?? 0;
+  const counted = result.total[0]?.count ?? 0;
+  const total = Math.min(counted, PLACE_COUNT_CAP);
   const pinMap = await getPinMap(userId, result.items.map((place) => place._id));
   const items = result.items.map((place) => {
     const leg = planLeg([lng, lat], place.location.coordinates, { modes });
@@ -182,12 +210,29 @@ export const searchPlaces = async (filters, userId) => {
     };
   });
 
-  return { items, page, limit, total, has_more: page * limit < total };
+  return { items, page, limit, total, total_capped: counted > PLACE_COUNT_CAP, has_more: page * limit < counted };
 };
 
-// Dùng cho bộ lên lộ trình: lấy toàn bộ ứng viên khớp bộ lọc (kèm distance_m), không phân trang.
-export const findCandidatePlaces = (filters, maxCandidates) =>
-  Place.aggregate([...buildNearbyPipeline(filters), { $limit: maxCandidates }]);
+// Thứ tự chất lượng cho ứng viên lộ trình: đã kiểm chứng (có đánh giá) -> biết giờ mở cửa -> độ tin cậy.
+const CANDIDATE_QUALITY_SORT = { review_count: -1, rating: -1, hours_known: -1, confidence: -1 };
+
+/**
+ * Ứng viên cho bộ lên lộ trình (kèm distance_m). Hàng chục nghìn nơi => không thể lấy "N nơi gần nhất" (toàn quán sát vách),
+ * mà lấy theo TỪNG loại hình: N nơi chất lượng nhất trong bán kính + M nơi gần nhất, rồi gộp, bỏ trùng.
+ */
+export const findCandidatePlaces = async (filters) => {
+  const categories = filters.categories?.length ? filters.categories : EXPLORE_CATEGORY_VALUES;
+  const { best, nearest } = PLANNER_CANDIDATES_PER_CATEGORY;
+  const facets = Object.fromEntries(
+    categories.flatMap((category) => [
+      [`${category}_best`, [{ $match: { category } }, { $sort: CANDIDATE_QUALITY_SORT }, { $limit: best }]],
+      [`${category}_near`, [{ $match: { category } }, { $limit: nearest }]], // $geoNear đã xếp theo khoảng cách
+    ]),
+  );
+  const [groups] = await Place.aggregate([...buildNearbyPipeline({ ...filters, categories }), { $facet: facets }]);
+  const unique = new Map(Object.values(groups).flat().map((place) => [String(place._id), place]));
+  return [...unique.values()];
+};
 
 export const getPlaceById = async (placeId, userId) => {
   const place = await Place.findById(placeId).lean();

@@ -8,7 +8,6 @@ import { addMinutesToTime, haversineKm, isOpenAt, roundTo } from '../utils/geo.j
 import { planLeg, resolveModes } from '../utils/transport.js';
 import { findCandidatePlaces, getPlacesByIds, toPlaceView } from './place.service.js';
 
-const MAX_CANDIDATES = 150;
 const MINUTES_PER_HOUR = 60;
 const AVG_MINUTES_PER_STOP = 75; // ~60 phút ở lại + ~15 phút di chuyển
 const MIN_STOPS = 2;
@@ -21,6 +20,12 @@ const MAX_RATING = 5;
 const BUDGET_SHARE_FACTOR = 1.8;
 // Phong cách (hẹn hò, gia đình...) là ưu tiên mạnh chứ không phải điều kiện cứng => vẫn ra lộ trình khi ít điểm khớp.
 const STYLE_WEIGHT = 0.6;
+// Nơi chưa ai đánh giá (dữ liệu mở): coi như ~3.6★ thay vì 0 — không bị loại hẳn, nhưng thua nơi đã được đánh giá tốt.
+const UNRATED_RATING_SCORE = 0.3;
+// Chưa rõ giờ mở cửa => có rủi ro tới nơi thấy đóng cửa: trừ nhẹ điểm để ưu tiên nơi biết giờ.
+const UNKNOWN_HOURS_PENALTY = 0.15;
+
+const isUnrated = (place) => !(place.review_count > 0) && !(place.rating > 0);
 
 const avgPrice = (place) => (place.price_range.min + place.price_range.max) / 2;
 
@@ -64,7 +69,7 @@ const buildScorer = (candidates, { tags, radiusKm }) => {
 
   const features = (place) => ({
     price: 1 - avgPrice(place) / maxPrice,
-    rating: Math.max(0, (place.rating - MIN_RATING_SCALE) / (MAX_RATING - MIN_RATING_SCALE)),
+    rating: isUnrated(place) ? UNRATED_RATING_SCORE : Math.max(0, (place.rating - MIN_RATING_SCALE) / (MAX_RATING - MIN_RATING_SCALE)),
     popularity: Math.log10(1 + (place.review_count ?? 0)) / maxReviewLog,
     proximity: Math.max(0, 1 - place.distance_m / 1000 / radiusKm),
     style: tagSet.size ? (place.tags ?? []).filter((tag) => tagSet.has(tag)).length / tagSet.size : 0,
@@ -72,7 +77,8 @@ const buildScorer = (candidates, { tags, radiusKm }) => {
 
   return (place, weights) => {
     const feature = features(place);
-    return Object.entries(weights).reduce((sum, [key, weight]) => sum + feature[key] * weight, feature.style * STYLE_WEIGHT);
+    const penalty = place.hours_known === false ? UNKNOWN_HOURS_PENALTY : 0;
+    return Object.entries(weights).reduce((sum, [key, weight]) => sum + feature[key] * weight, feature.style * STYLE_WEIGHT - penalty);
   };
 };
 
@@ -213,6 +219,8 @@ export const buildPlan = (orderedPlaces, { origin, modes, startTime, people, tri
     within_duration: durationLimit == null || travelMinutes + visitMinutes <= durationLimit,
     avg_rating: rated.length ? roundTo(rated.reduce((total, place) => total + place.rating, 0) / rated.length) : null,
     all_open: stops.every((stop) => stop.open_on_arrival), // false => có điểm đóng cửa lúc bạn tới
+    unknown_hours_stops: orderedPlaces.filter((place) => place.hours_known === false).length, // nên kiểm tra giờ trước khi đi
+    estimated_price_stops: orderedPlaces.filter((place) => place.price_estimated).length, // giá là ước tính theo loại hình
     transport: summarizeTransport(stops),
   };
 
@@ -290,7 +298,7 @@ const toPlaceFilters = (criteria) => ({
 export const suggestItineraries = async (criteria, mustIncludeIds = []) => {
   const origin = [criteria.origin.lng, criteria.origin.lat];
   const [found, mustIncludeRaw] = await Promise.all([
-    findCandidatePlaces(toPlaceFilters(criteria), MAX_CANDIDATES),
+    findCandidatePlaces(toPlaceFilters(criteria)),
     getPlacesByIds(mustIncludeIds),
   ]);
   // Bỏ những nơi đóng cửa suốt chuyến đi (VD đi lúc 22:00 thì không gợi ý bảo tàng).

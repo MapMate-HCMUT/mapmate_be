@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { DEFAULT_VISIT_MINUTES, PLACE_CATEGORY_VALUES, PLACE_TAG_VALUES } from '../constants/places.js';
+import { PLACE_SOURCES, PLACE_SOURCE_VALUES } from '../constants/openData.js';
 import { normalizeSearchText } from '../utils/text.js';
 
 const placeSchema = new mongoose.Schema(
@@ -96,6 +97,48 @@ const placeSchema = new mongoose.Schema(
       default: '',
       select: false,
     },
+
+    // ── Nguồn dữ liệu (nhập từ Overture Maps / OpenStreetMap, xem src/scripts/openData) ──
+    source: {
+      type: String,
+      enum: PLACE_SOURCE_VALUES,
+      default: PLACE_SOURCES.MAPMATE,
+    },
+    // Mã bản ghi ở nguồn gốc: "overture:<id>" hoặc "osm:node/123" — để nhập lại không tạo trùng
+    source_ref: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    osm_ref: { type: String, default: null }, // khi 1 địa điểm Overture được ghép thêm dữ liệu từ OSM
+    // Độ tin cậy 0–1 (Overture chấm: còn hoạt động, đúng vị trí). Dữ liệu nhóm tự nhập = 1.
+    confidence: {
+      type: Number,
+      default: 1,
+      min: 0,
+      max: 1,
+    },
+    // true = price_range là giá ƯỚC TÍNH theo loại hình (nguồn mở không có giá), chưa ai xác nhận
+    price_estimated: {
+      type: Boolean,
+      default: false,
+    },
+    // false = chưa rõ giờ mở cửa (opening_hours để trống KHÔNG có nghĩa là mở cả ngày)
+    hours_known: {
+      type: Boolean,
+      default: true,
+    },
+    // Ẩm thực / món: "Món Nhật", "Lẩu"... (để tìm kiếm + hiển thị)
+    cuisines: {
+      type: [String],
+      default: [],
+    },
+    contact: {
+      phone: { type: String, default: null },
+      website: { type: String, default: null },
+      facebook: { type: String, default: null },
+    },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -111,8 +154,11 @@ placeSchema.index({ category: 1, district: 1 });
 // Lọc theo phong cách
 placeSchema.index({ tags: 1 });
 
-export const buildPlaceSearchText = ({ name = '', address = '', district = '', specialties = [] }) =>
-  normalizeSearchText([name, address, district, ...specialties].join(' '));
+// Lọc theo nguồn (VD chỉ lấy dữ liệu nhóm đã kiểm tra) + xếp "Phổ biến"
+placeSchema.index({ source: 1 });
+
+export const buildPlaceSearchText = ({ name = '', address = '', district = '', specialties = [], cuisines = [] }) =>
+  normalizeSearchText([name, address, district, ...specialties, ...cuisines].join(' '));
 
 placeSchema.pre('save', function fillSearchText() {
   this.search_text = buildPlaceSearchText(this);

@@ -9,7 +9,10 @@
     "dev": "node --env-file=.env --watch src/server.js",
     "seed:users": "node --env-file=.env src/scripts/seedDemoUsers.js",
     "seed:places": "node --env-file=.env src/scripts/seedPlaces.js",
-    "seed:social": "node --env-file=.env src/scripts/seedSocial.js"
+    "seed:social": "node --env-file=.env src/scripts/seedSocial.js",
+    "places:fetch-overture": "node src/scripts/fetchOverturePlaces.js",
+    "places:fetch-osm": "node src/scripts/fetchOsmPlaces.js",
+    "places:import": "node --env-file=.env src/scripts/importOpenPlaces.js"
   },
   "repository": {
     "type": "git",

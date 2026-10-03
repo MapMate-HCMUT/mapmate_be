@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  DEFAULT_PLACE_SORT,
   EXPLORE_CATEGORIES,
   PLACE_SEARCH_DEFAULT_LIMIT,
   PLACE_SEARCH_MAX_LIMIT,
@@ -37,7 +38,7 @@ export const nearbyQuerySchema = z.object({
   open_at: timeOfDay.optional(),
   vehicle: vehicleSchema.default(DEFAULT_VEHICLE),
   transport_modes: csvList(customModeSchema),
-  sort: z.enum(PLACE_SORT_VALUES, 'Kiểu sắp xếp không hợp lệ').default('distance'),
+  sort: z.enum(PLACE_SORT_VALUES, 'Kiểu sắp xếp không hợp lệ').default(DEFAULT_PLACE_SORT),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(PLACE_SEARCH_MAX_LIMIT).default(PLACE_SEARCH_DEFAULT_LIMIT),
 });

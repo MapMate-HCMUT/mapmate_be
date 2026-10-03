@@ -31,6 +31,7 @@ export const PLACE_TAGS = [
 export const PLACE_TAG_VALUES = PLACE_TAGS.map((tag) => tag.value);
 
 export const PLACE_SORTS = [
+  { value: 'recommended', label: 'Đề xuất' },
   { value: 'distance', label: 'Gần nhất' },
   { value: 'rating', label: 'Đánh giá cao' },
   { value: 'popular', label: 'Phổ biến' },
@@ -45,8 +46,21 @@ export const PEOPLE_FILTER = { min: 1, max: 20, default: 2 };
 export const DURATION_FILTER = { min: 1, max: 12, default: 4 }; // giờ
 export const MIN_RATING_PRESETS = [3, 4, 4.5];
 
+export const DEFAULT_PLACE_SORT = 'recommended';
+
+/**
+ * Sắp xếp "Đề xuất": điểm = tổng có trọng số (cao hơn = lên trước). Dữ liệu mở có hàng chục nghìn nơi chưa ai đánh giá,
+ * nên ưu tiên nơi đã kiểm chứng (có đánh giá), biết giờ mở cửa, độ tin cậy cao — rồi mới tới gần.
+ */
+export const RECOMMENDED_SORT_WEIGHTS = { reviewed: 1, hoursKnown: 0.25, confidence: 0.5, proximity: 0.8 };
+
 export const PLACE_SEARCH_DEFAULT_LIMIT = 12;
 export const PLACE_SEARCH_MAX_LIMIT = 40;
+// Đếm tổng số kết quả tối đa tới mức này (hiện "1.000+") — đếm hết 20.000 nơi trong bán kính 20 km là lãng phí.
+export const PLACE_COUNT_CAP = 1000;
+
+// Ứng viên cho bộ lên lộ trình: mỗi loại hình lấy N nơi chất lượng nhất + M nơi gần nhất trong bán kính.
+export const PLANNER_CANDIDATES_PER_CATEGORY = { best: 40, nearest: 15 };
 
 // Trung tâm Quận 1 — dùng khi người dùng chưa cho phép định vị. [lng, lat]
 export const DEFAULT_ORIGIN = { lng: 106.7009, lat: 10.7769 };

@@ -99,7 +99,7 @@ npm run seed:social   # (tuỳ chọn) bạn bè, ghim, lộ trình, bài viết
 | Method | Endpoint | Auth | Body / Query | `data` trả về |
 |---|---|---|---|---|
 | GET | `/api/places/filter-options` | — | — | Mọi lựa chọn của bộ lọc: `categories`, `tags`, `vehicles`, `sorts`, `price`, `districts`... |
-| GET | `/api/places/nearby` | Tuỳ chọn | `lat, lng, radius_km, categories, tags, price_min, price_max, min_rating, district, q, open_at, vehicle, sort, page, limit` | `{ items, total, has_more }` (kèm `distance_km`, `travel_minutes`, `my_pin`) |
+| GET | `/api/places/nearby` | Tuỳ chọn | `lat, lng, radius_km, categories, tags, price_min, price_max, min_rating, district, q, open_at, vehicle, sort (mặc định recommended), page, limit` | `{ items, total, total_capped, has_more }` (kèm `distance_km`, `travel_minutes`, `my_pin`, `source`, `hours_known`, `price_estimated`). Đếm tối đa 1.000 (`total_capped = true` => hiện "1.000+") |
 | GET | `/api/places/:id` | Tuỳ chọn | — | Chi tiết 1 địa điểm |
 | POST | `/api/itineraries/suggest` | Tuỳ chọn | `{ criteria, place_ids? }` | `{ criteria, candidate_count, options[≤3] }` — mỗi option có `stops[]` + `summary` |
 | POST | `/api/itineraries/preview` | — | `{ criteria, place_ids }` | `{ stops, summary }` cho đúng các điểm đang chọn |
@@ -116,6 +116,25 @@ npm run seed:social   # (tuỳ chọn) bạn bè, ghim, lộ trình, bài viết
 - **`summary`** của mỗi lộ trình: `total_minutes`, `travel_minutes`, `visit_minutes`, `total_distance_km`, `places_cost_per_person`, `transport_cost_per_person`, `cost_per_person`, `total_cost`, `budget_left`, `time_left_minutes`, `within_budget`, `within_duration`, `avg_rating`, `all_open`, `transport[]` (theo từng phương tiện). Được lưu vào `itineraries.summary`.
 - Khoảng cách/thời gian là **ước lượng** (đường chim bay × 1.3, tốc độ trung bình từng phương tiện). Khi tích hợp Goong Directions / Distance Matrix chỉ cần thay hàm `planLeg` trong [utils/transport.js](src/utils/transport.js).
 - `Place` và `Itinerary` là model có sẵn, chỉ **thêm trường** (`tags`, `review_count`, `opening_hours`, `avg_visit_minutes`, `search_text`; `criteria`, `visibility`, `people`...) và thêm loại hình `entertainment`.
+
+## Dữ liệu địa điểm từ nguồn mở (Overture Maps + OpenStreetMap)
+
+~25.700 quán ăn, cà phê, điểm tham quan, giải trí, mua sắm ở TP.HCM — giấy phép cho phép **lưu vào DB** (khác Google Places), chỉ cần ghi nguồn (frontend đã hiện dưới danh sách).
+
+```bash
+pip install overturemaps            # 1 lần (Python ≥ 3.10) — công cụ tải chính thức của Overture
+npm run places:fetch-overture       # -> data/open/overture_hcmc.geojsonseq (~450 MB, ~30 giây)
+npm run places:fetch-osm            # -> data/open/osm_hcmc.json (~2 MB, qua Overpass API)
+npm run places:import -- --dry-run  # chỉ thống kê, KHÔNG ghi DB
+npm run places:import               # ghi vào `places` (~2 phút). Thêm --prune để xoá bản ghi cũ không còn trong nguồn
+```
+
+- Chạy `seed:places` **trước** để 44 địa điểm nhóm tự nhập được giữ nguyên (dữ liệu mở trùng tên sẽ bị bỏ qua).
+- Nhập lại nhiều lần được: cập nhật theo `source_ref`, **không ghi đè** `rating`, `review_count`, `price_range`, `is_trending` (để dành cho cộng đồng sửa). `--prune` không xoá nơi đang được ghim / đăng bài / có trong lộ trình.
+- Kết quả chi tiết của mỗi lần nhập: `data/open/import-report.json`. Thư mục `data/open/` không đưa lên git.
+- Trường mới của `Place`: `source` (`mapmate` / `overture` / `osm` / `community`), `source_ref`, `osm_ref`, `confidence`, `price_estimated`, `hours_known`, `cuisines`, `contact { phone, website, facebook }`.
+- Dữ liệu mở **không có đánh giá** (`rating = 0`, hiện "Chưa có đánh giá"), **giá là ước tính theo loại hình** (`price_estimated = true`), phần lớn **chưa rõ giờ** (`hours_known = false` — khác với `opening_hours = null` của dữ liệu nhóm nghĩa là mở cả ngày).
+- Code: [src/scripts/importOpenPlaces.js](src/scripts/importOpenPlaces.js) + [src/scripts/openData/](src/scripts/openData) (ánh xạ loại hình + giá ước tính ở `placeKinds.js`, gộp trùng ở `placeMerger.js`, chuẩn hoá quận ở `districts.js`).
 
 ## Kết nối: Bạn bè, Bảng tin, Ghim
 
