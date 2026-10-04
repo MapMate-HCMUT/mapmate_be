@@ -62,13 +62,20 @@ export const googleLoginUser = async ({ credential, email, name, picture, google
 
   let user = await User.findOne({ email: googleEmail.toLowerCase() });
   if (!user) {
-    let baseUsername = (googleName || googleEmail.split('@')[0])
+    // Chuẩn hóa tên bỏ dấu tiếng Việt, đảm bảo tối thiểu 3 ký tự
+    const cleanName = (googleName || googleEmail.split('@')[0])
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-zA-Z0-9_]/g, '')
-      .slice(0, 16) || 'user';
+      .trim();
+
+    let baseUsername = cleanName.length >= 3 ? cleanName.slice(0, 15) : `user_${cleanName}`.slice(0, 15);
+    if (baseUsername.length < 3) baseUsername = `user_${Date.now().toString().slice(-4)}`;
+
     let username = baseUsername;
     let counter = 1;
     while (await User.findOne({ username })) {
-      username = `${baseUsername.slice(0, 12)}_${counter++}`;
+      username = `${baseUsername.slice(0, 11)}_${counter++}`;
     }
 
     user = await User.create({
