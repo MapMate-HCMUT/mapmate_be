@@ -186,6 +186,21 @@ const ROWS = [
   ],
 ];
 
+// Loại chi tiết (Place.kind) — cùng bộ giá trị với dữ liệu mở (scripts/openData/placeKinds.js), để suy ra vai trò điểm dừng.
+const KIND_BY_NAME = {
+  'Phở Hòa Pasteur': 'restaurant', 'Bánh mì Huỳnh Hoa': 'street_food', 'Cơm tấm Ba Ghiền': 'street_food', 'Bún bò Huế Đông Ba': 'restaurant',
+  'Ốc Đào': 'street_food', 'Phố ẩm thực Vĩnh Khánh': 'food_street', "Pizza 4P's Lê Thánh Tôn": 'restaurant', 'Quán Bụi Garden': 'restaurant',
+  'Hủ tiếu Nam Vang Thành Đạt': 'street_food', 'Lẩu dê Trương Định': 'restaurant', 'Bánh xèo 46A': 'street_food', 'Chợ đêm Hồ Thị Kỷ': 'food_street',
+  'The Workshop Coffee': 'coffee', 'Cộng Cà Phê Lý Tự Trọng': 'coffee', 'Cà phê Chung cư 42 Nguyễn Huệ': 'coffee', 'Okkio Caffe Bến Thành': 'coffee',
+  'Cà phê Vợt Phan Đình Phùng': 'coffee', 'Bâng Khuâng Café': 'coffee', 'Oromia Coffee & Lounge': 'coffee', 'Là Việt Coffee': 'coffee',
+  'Dinh Độc Lập': 'museum', 'Nhà thờ Đức Bà': 'worship', 'Bưu điện Trung tâm Sài Gòn': 'landmark', 'Bitexco Saigon Skydeck': 'landmark',
+  'Bảo tàng Chứng tích Chiến tranh': 'museum', 'Chùa Ngọc Hoàng': 'worship', 'Bảo tàng Mỹ thuật TP.HCM': 'museum', 'Landmark 81 SkyView': 'landmark',
+  'Chùa Bà Thiên Hậu': 'worship', 'Nhà hát Thành phố': 'theatre', 'Phố đi bộ Nguyễn Huệ': 'walking_street', 'Phố đi bộ Bùi Viện': 'walking_street',
+  'CGV Vincom Đồng Khởi': 'cinema', 'Công viên Tao Đàn': 'park', 'Thảo Cầm Viên Sài Gòn': 'zoo', 'Saigon Outcast': 'bar',
+  'Công viên văn hoá Đầm Sen': 'theme_park', 'Chợ Bến Thành': 'market', 'Saigon Centre': 'mall', 'Vincom Center Đồng Khởi': 'mall',
+  'Crescent Mall': 'mall', 'Chợ An Đông': 'market', 'Đường sách Nguyễn Văn Bình': 'bookstore', 'Chợ Tân Định': 'market',
+};
+
 export const SEED_PLACES = ROWS.map(
   ([name, address, district, category, lng, lat, rating, reviewCount, min, max, open, close, visitMinutes, trending, tags, specialties, imageUrl]) => ({
     name,
@@ -202,5 +217,6 @@ export const SEED_PLACES = ROWS.map(
     tags,
     specialties,
     image_url: imageUrl || null,
+    kind: KIND_BY_NAME[name] ?? null,
   }),
 );

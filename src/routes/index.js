@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { aiRouter } from './ai.routes.js';
 import { authRouter } from './auth.routes.js';
 import { friendRouter } from './friend.routes.js';
 import { itineraryRouter } from './itinerary.routes.js';
@@ -21,3 +22,4 @@ apiRouter.use('/itineraries', itineraryRouter);
 apiRouter.use('/friends', friendRouter);
 apiRouter.use('/posts', postRouter);
 apiRouter.use('/pins', pinRouter);
+apiRouter.use('/ai', aiRouter);

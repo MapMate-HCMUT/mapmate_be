@@ -1,3 +1,4 @@
+import { AI_MODEL_DEFAULTS, AI_MODEL_TIERS, GROQ_DEFAULT_BASE_URL } from '../constants/ai.js';
 import { JWT_DEFAULT_EXPIRES_IN } from '../constants/auth.js';
 
 const required = (name) => {
@@ -14,4 +15,13 @@ export const env = {
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || JWT_DEFAULT_EXPIRES_IN,
   corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()),
+  // Groq (AI Planner). Không có key => AI Planner vẫn chạy bằng bộ hiểu câu dựa trên luật (chất lượng thấp hơn).
+  llm: {
+    apiKey: process.env.GROQ_API_KEY || null,
+    baseUrl: process.env.GROQ_BASE_URL || GROQ_DEFAULT_BASE_URL,
+    models: {
+      [AI_MODEL_TIERS.FAST]: process.env.GROQ_MODEL_FAST || AI_MODEL_DEFAULTS[AI_MODEL_TIERS.FAST].id,
+      [AI_MODEL_TIERS.SMART]: process.env.GROQ_MODEL_SMART || AI_MODEL_DEFAULTS[AI_MODEL_TIERS.SMART].id,
+    },
+  },
 };

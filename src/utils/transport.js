@@ -154,3 +154,9 @@ export const planLeg = (from, to, { modes, people = 1, date = new Date() }) => {
     segments: best.segments,
   };
 };
+
+// Đi giữa 2 điểm trong CÙNG 1 mall (ăn ở tầng 3 rồi xuống tầng 1 uống trà sữa): đi bộ vài phút, 0đ, không gửi xe lại.
+export const insideVenueLeg = (venueName, minutes) => {
+  const item = { ...segment('walk', 0, minutes, 0), label: `Đi bộ trong ${venueName}` };
+  return { mode: 'walk', label: item.label, emoji: item.emoji, minutes: item.minutes, distanceKm: 0, costPerPerson: 0, segments: [item] };
+};

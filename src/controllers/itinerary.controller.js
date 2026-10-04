@@ -18,8 +18,8 @@ export const suggest = asyncHandler(async (req, res) => {
 });
 
 export const preview = asyncHandler(async (req, res) => {
-  const { criteria, place_ids: placeIds } = req.validated.body;
-  return sendSuccess(res, { data: await previewItinerary(criteria, placeIds) });
+  const { criteria, place_ids: placeIds, keep_order: keepOrder, stay_overrides: stayOverrides } = req.validated.body;
+  return sendSuccess(res, { data: await previewItinerary(criteria, placeIds, { keepOrder, stayOverrides }) });
 });
 
 export const create = asyncHandler(async (req, res) => {

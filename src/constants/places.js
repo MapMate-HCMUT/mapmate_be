@@ -81,3 +81,15 @@ export const PLANNER_CANDIDATES_PER_CATEGORY = { best: 40, nearest: 15 };
 // Trung tâm Quận 1 — dùng khi người dùng chưa cho phép định vị. [lng, lat]
 export const DEFAULT_ORIGIN = { lng: 106.7009, lat: 10.7769 };
 export const DEFAULT_VISIT_MINUTES = 60;
+
+// Không có kết quả => tự nới dần bộ lọc (từ điều kiện "phụ" tới "chính"), giữ nguyên ô tìm kiếm + vị trí.
+// Người dùng không phải tự bấm "Đặt lại bộ lọc"; giao diện báo đã tạm bỏ những gì. Mỗi bước gộp các bước trước.
+export const PLACE_RELAX_STEPS = [
+  { keys: ['tags'], label: 'phong cách' },
+  { keys: ['min_rating'], label: 'số sao' },
+  { keys: ['open_at'], label: 'đang mở cửa' },
+  { keys: ['price_min', 'price_max'], label: 'khoảng giá' },
+  { keys: ['district'], label: 'quận' },
+  { keys: ['categories'], label: 'loại hình' },
+  { keys: ['radius_km'], label: 'bán kính', widen: true }, // không xoá mà nới tới tối đa
+];

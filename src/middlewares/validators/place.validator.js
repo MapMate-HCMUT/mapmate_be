@@ -45,6 +45,8 @@ export const nearbyQuerySchema = z.object({
   vehicle: vehicleSchema.default(DEFAULT_VEHICLE),
   transport_modes: csvList(customModeSchema),
   sort: z.enum(PLACE_SORT_VALUES, 'Kiểu sắp xếp không hợp lệ').default(DEFAULT_PLACE_SORT),
+  // true => không có kết quả thì server tự nới dần bộ lọc (trang Khám phá, AI tìm quán)
+  auto_relax: z.stringbool().default(false),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(PLACE_SEARCH_MAX_LIMIT).default(PLACE_SEARCH_DEFAULT_LIMIT),
 });

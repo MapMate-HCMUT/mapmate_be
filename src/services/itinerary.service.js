@@ -65,14 +65,15 @@ const planToStops = (plan) =>
 
 // POST /api/itineraries — client chỉ gửi danh sách địa điểm theo thứ tự; giờ giấc & chi phí do server tính lại.
 export const createItinerary = async (userId, input) => {
-  const { name, place_ids: placeIds, vehicle, transport_modes: transportModes, people, start_time: startTime, origin, criteria, tags, visibility } = input;
+  const { name, place_ids: placeIds, vehicle, transport_modes: transportModes, people, start_time: startTime, origin, criteria, tags, visibility, stay_overrides: stayOverrides = {} } = input;
   const places = await getPlacesByIds(placeIds);
+  // stay_overrides = thời gian ở lại người dùng đang thấy (gợi ý đã kéo dài / tự chỉnh ±15′) => lưu đúng như vậy
   const plan = buildPlan(places, {
     origin, startTime, people,
     modes: resolveModes(vehicle, transportModes),
     tripBudget: criteria?.trip_budget ?? null,
     durationHours: criteria?.duration_hours ?? null,
-  });
+  }, { stayOverrides });
 
   const itinerary = await Itinerary.create({
     user_id: userId, name, vehicle, people, tags, visibility,

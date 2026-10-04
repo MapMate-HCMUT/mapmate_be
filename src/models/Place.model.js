@@ -134,6 +134,12 @@ const placeSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Loại chi tiết từ nguồn dữ liệu: restaurant, street_food, bakery, coffee, bar, museum, theme_park... (scripts/openData/placeKinds.js)
+    // Dùng để suy ra VAI TRÒ của điểm dừng (bữa chính / ăn vặt / đồ uống / hoạt động) — utils/visitRole.js
+    kind: { type: String, default: null },
+    // Nằm TRONG địa điểm khác (quán ăn trong Vincom, rạp trong Crescent Mall) — gắn bởi script places:link-venues
+    parent_place_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Place', default: null },
+    parent_place_name: { type: String, default: null },
     // Ẩm thực / món: "Món Nhật", "Lẩu"... (để tìm kiếm + hiển thị)
     cuisines: {
       type: [String],
@@ -172,6 +178,9 @@ placeSchema.index({ category: 1, district: 1 });
 
 // Lọc theo phong cách
 placeSchema.index({ tags: 1 });
+
+// Các điểm bên trong 1 mall
+placeSchema.index({ parent_place_id: 1 }, { sparse: true });
 
 // Lọc theo nguồn (VD chỉ lấy dữ liệu nhóm đã kiểm tra) + xếp "Phổ biến"
 placeSchema.index({ source: 1 });
