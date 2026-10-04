@@ -7,6 +7,7 @@ import {
   PLACE_COUNT_CAP,
   PLACE_STATUS,
   PLACE_SORTS,
+  PLACE_RELAX_STEPS,
   PLACE_TAGS,
   PLANNER_CANDIDATES_PER_CATEGORY,
   PRICE_FILTER,
@@ -34,6 +35,7 @@ import { planLeg, resolveModes } from '../utils/transport.js';
 import { createMemoryCache } from '../utils/memoryCache.js';
 import { getMyReportMap } from './placeReport.service.js';
 import { escapeRegExp, normalizeSearchText } from '../utils/text.js';
+import { isMall } from '../utils/venue.js';
 
 const METERS_PER_KM = 1000;
 const DISTRICT_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -179,6 +181,8 @@ export const toPlaceView = (place, { pin, report } = {}) => {
     source: place.source ?? PLACE_SOURCES.MAPMATE,
     price_estimated: Boolean(place.price_estimated),
     cuisines: place.cuisines ?? [],
+    kind: place.kind ?? null, // loại chi tiết (restaurant, coffee, museum...) — suy vai trò điểm dừng
+    venue: place.parent_place_id ? { id: place.parent_place_id, name: place.parent_place_name } : null, // nằm trong mall nào
     contact: place.contact ?? null,
     image_url: place.image_url ?? null,
     status: place.status ?? PLACE_STATUS.ACTIVE,
@@ -202,7 +206,7 @@ const viewerState = (userId, place, pinMap, reportMap) =>
   userId ? { pin: pinMap.get(String(place._id)) ?? null, report: reportMap.get(String(place._id)) ?? null } : {};
 
 // GET /api/places/nearby — tìm địa điểm theo bộ lọc, có phân trang và tổng số kết quả.
-export const searchPlaces = async (filters, userId) => {
+const runSearch = async (filters, userId) => {
   const { sort, page, limit, vehicle, transport_modes: customModes, lat = DEFAULT_ORIGIN.lat, lng = DEFAULT_ORIGIN.lng } = filters;
   const modes = resolveModes(vehicle, customModes);
   const [result] = await Place.aggregate([
@@ -229,6 +233,41 @@ export const searchPlaces = async (filters, userId) => {
   });
 
   return { items, page, limit, total, total_capped: counted > PLACE_COUNT_CAP, has_more: page * limit < counted, radius_km: searchRadiusKm(filters) };
+};
+
+const isActive = (value) => (Array.isArray(value) ? value.length > 0 : value != null && value !== '' && value !== 0);
+
+/**
+ * Nới dần bộ lọc cho tới khi có kết quả: chỉ bỏ những điều kiện ĐANG bật, theo thứ tự PLACE_RELAX_STEPS.
+ * @returns {{ result, relaxed: { keys, labels, radius_km? } } | null} null = nới hết vẫn không có
+ */
+const searchRelaxed = async (filters, userId) => {
+  const next = { ...filters };
+  const relaxed = { keys: [], labels: [] };
+  // Có từ khoá ("phở hòa") => người dùng tìm đúng quán đó: bỏ 1 lần mọi bộ lọc đang bật (như bấm "Đặt lại bộ lọc"),
+  // nới từng bước sẽ dừng ở quán na ná tên ("Cà Phê Phố") trong khi quán thật bị bộ lọc loại hình chặn
+  const steps = filters.q
+    ? [PLACE_RELAX_STEPS.filter((step) => !step.widen && step.keys.some((key) => isActive(filters[key]))).reduce((all, step) => ({ keys: [...all.keys, ...step.keys], labels: [...all.labels, step.label] }), { keys: [], labels: [] })]
+    : PLACE_RELAX_STEPS;
+  for (const step of steps) {
+    const widen = step.widen && !filters.q && (filters.radius_km ?? RADIUS_FILTER.default) < RADIUS_FILTER.max;
+    if (!widen && (step.widen || !step.keys.some((key) => isActive(filters[key])))) continue;
+    step.keys.forEach((key) => (widen ? (next[key] = RADIUS_FILTER.max) : delete next[key]));
+    relaxed.keys.push(...step.keys);
+    relaxed.labels.push(...(step.labels ?? [step.label]));
+    if (widen) relaxed.radius_km = RADIUS_FILTER.max;
+    const result = await runSearch(next, userId);
+    if (result.total > 0) return { result, relaxed };
+  }
+  return null;
+};
+
+// GET /api/places/nearby — auto_relax: không có kết quả thì tự nới bộ lọc (người dùng khỏi phải bấm "Đặt lại bộ lọc")
+export const searchPlaces = async (filters, userId) => {
+  const result = await runSearch(filters, userId);
+  if (result.total > 0 || !filters.auto_relax || filters.page > 1) return { ...result, relaxed: null };
+  const found = await searchRelaxed(filters, userId);
+  return found ? { ...found.result, relaxed: found.relaxed } : { ...result, relaxed: null };
 };
 
 // Thứ tự chất lượng cho ứng viên lộ trình: đã kiểm chứng (có đánh giá) -> biết giờ mở cửa -> độ tin cậy.
@@ -266,3 +305,83 @@ export const getPlacesByIds = async (placeIds) => {
   if (missing) throw new AppError('Có địa điểm không còn tồn tại', HTTP_STATUS.NOT_FOUND, EXPLORE_ERROR_CODES.PLACE_NOT_FOUND);
   return placeIds.map((id) => byId.get(String(id))); // giữ đúng thứ tự người dùng chọn
 };
+
+// ── Tra địa điểm theo tên (AI Planner: "xuất phát từ Landmark 81", "phải ghé Chợ Bến Thành", "món ốc") ──
+
+const NAME_LOOKUP_CANDIDATES = 15;
+// Tên chính của 1 địa danh ("Khu du lịch Suối Tiên") hơn tên trò chơi / quán bên trong ("Roller Coaster (Suoi Tien Park)")
+const MAIN_PLACE_PREFIX = /^(khu du lich|cong vien|thao cam vien|bao tang|cho|trung tam thuong mai|nha tho|chua|dinh|pho di bo)\b/;
+const nameScore = (place, needle) => {
+  const name = normalizeSearchText(place.name);
+  if (name === needle) return 3;
+  if (name.startsWith(needle) || needle.startsWith(name)) return 2;
+  if (!name.includes(needle)) return 0;
+  // chứa từ khoá: tên càng ngắn (từ khoá chiếm phần lớn) + có tiền tố địa danh chính => càng đúng
+  return 1 + (needle.length / name.length) * 0.5 + (MAIN_PLACE_PREFIX.test(name) ? 0.3 : 0);
+};
+
+/**
+ * Tìm các địa điểm khớp `text` (không dấu, không phân biệt hoa thường) quanh `near` [lng, lat], trong `radiusKm`.
+ * Ưu tiên tên khớp đúng > tên bắt đầu bằng > tên chứa > (cùng điểm) đã kiểm chứng > gần hơn. Không gồm nơi đã đóng cửa.
+ */
+// preferLandmarks: người dùng gọi tên 1 địa danh ("Suối Tiên") => ưu tiên khu vui chơi / điểm tham quan hơn quán ăn mượn tên khu vực
+// ("Ẩm Thực Suối Tiên"). Tên quán khớp chính xác vẫn thắng (điểm khớp tên cao hơn).
+const LANDMARK_CATEGORIES = new Set(['park', 'attraction', 'entertainment', 'shopping']);
+const LANDMARK_BONUS = 0.6;
+
+export const lookupPlacesByText = async (text, { near, radiusKm, categories, limit = 1, preferLandmarks = false }) => {
+  const needle = normalizeSearchText(text);
+  if (!needle) return [];
+  const query = { search_text: { $regex: escapeRegExp(needle) }, status: { $ne: PLACE_STATUS.CLOSED } };
+  if (categories?.length) query.category = { $in: categories };
+  const search = (match) => Place.aggregate([
+    { $geoNear: { near: { type: 'Point', coordinates: near }, distanceField: 'distance_m', maxDistance: radiusKm * METERS_PER_KM, query: match, spherical: true } },
+    { $limit: NAME_LOOKUP_CANDIDATES },
+  ]);
+  // Tìm địa danh: tìm riêng trong nhóm địa danh — "Crescent Mall" khớp địa chỉ của hàng chục quán bên trong,
+  // nếu chỉ lấy 15 nơi gần nhất thì chính cái mall có thể bị lọt
+  const landmarkCategories = [...LANDMARK_CATEGORIES].filter((category) => !categories?.length || categories.includes(category));
+  const groups = await Promise.all([search(query), ...(preferLandmarks && landmarkCategories.length ? [search({ ...query, category: { $in: landmarkCategories } })] : [])]);
+  const candidates = [...new Map(groups.flat().map((place) => [String(place._id), place])).values()];
+  return candidates
+    .map((place) => ({
+      place,
+      score: nameScore(place, needle) + (place.review_count > 0 ? 0.5 : 0) + (preferLandmarks && LANDMARK_CATEGORIES.has(place.category) ? LANDMARK_BONUS : 0) - place.distance_m / (radiusKm * METERS_PER_KM),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ place }) => place);
+};
+
+const MALL_LOOKUP_CANDIDATES = 40;
+const MIN_INSIDE_PLACES = 3;
+// Mall cho "đi mall chơi" (không nói mall nào): trong các mall có ≥ 3 quán / rạp bên trong, chọn nơi vừa gần vừa nhiều
+// chỗ bên trong — chuyến đi mall mà không có chỗ ăn trong mall thì không trọn vẹn
+export const findNearestMall = async ([lng, lat], radiusKm) => {
+  const shops = await Place.aggregate([
+    { $geoNear: { near: { type: 'Point', coordinates: [lng, lat] }, distanceField: 'distance_m', maxDistance: radiusKm * METERS_PER_KM, query: { category: 'shopping', status: { $ne: PLACE_STATUS.CLOSED } }, spherical: true } },
+    { $limit: MALL_LOOKUP_CANDIDATES },
+  ]);
+  const malls = shops.filter(isMall);
+  if (!malls.length) return null;
+  const inside = await Place.aggregate([{ $match: { parent_place_id: { $in: malls.map((mall) => mall._id) } } }, { $group: { _id: '$parent_place_id', count: { $sum: 1 } } }]);
+  const counts = new Map(inside.map((row) => [String(row._id), row.count]));
+  // Cân bằng "gần" và "nhiều chỗ bên trong": Vincom 28 quán cách 1 km hơn Diamond Plaza 4 quán cách 0.8 km
+  const worth = (mall) => (counts.get(String(mall._id)) ?? 0) / (1 + mall.distance_m / METERS_PER_KM);
+  const rich = malls.filter((mall) => (counts.get(String(mall._id)) ?? 0) >= MIN_INSIDE_PLACES);
+  return rich.length ? rich.reduce((best, mall) => (worth(mall) > worth(best) ? mall : best)) : malls[0];
+};
+
+// Các điểm nằm trong 1 mall (quán ăn, cà phê, rạp...) — chuyến đi mall lấy thêm làm ứng viên
+export const findPlacesInVenue = (venueId) => Place.find({ parent_place_id: venueId, status: { $ne: PLACE_STATUS.CLOSED } }).lean();
+
+// Tâm của 1 quận = trung bình toạ độ các địa điểm trong quận (cache 10 phút) — làm điểm xuất phát khi chỉ nói "ở Quận 4".
+
+export const getDistrictCenter = (district) =>
+  districtCache.wrap(`center:${district}`, async () => {
+    const [row] = await Place.aggregate([
+      { $match: { district } },
+      { $group: { _id: null, lng: { $avg: { $arrayElemAt: ['$location.coordinates', 0] } }, lat: { $avg: { $arrayElemAt: ['$location.coordinates', 1] } }, count: { $sum: 1 } } },
+    ]);
+    return row?.count ? { lng: roundTo(row.lng, 5), lat: roundTo(row.lat, 5) } : null;
+  });

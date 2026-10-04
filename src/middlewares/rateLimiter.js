@@ -1,4 +1,5 @@
 import { rateLimit } from 'express-rate-limit';
+import { AI_RATE_LIMIT } from '../constants/ai.js';
 import { AUTH_RATE_LIMIT } from '../constants/auth.js';
 import { SOCIAL_WRITE_RATE_LIMIT } from '../constants/social.js';
 import { ERROR_CODES } from '../constants/errorCodes.js';
@@ -33,4 +34,14 @@ export const socialWriteRateLimiter = rateLimit({
   legacyHeaders: false,
   handler: (_req, _res, next) =>
     next(new AppError('Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút', HTTP_STATUS.TOO_MANY_REQUESTS, ERROR_CODES.TOO_MANY_REQUESTS)),
+});
+
+// Mỗi lượt AI tốn tiền gọi Groq => 20 lượt / 10 phút / IP.
+export const aiRateLimiter = rateLimit({
+  windowMs: AI_RATE_LIMIT.WINDOW_MS,
+  limit: AI_RATE_LIMIT.MAX_REQUESTS,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, _res, next) =>
+    next(new AppError('Bạn hỏi AI hơi nhiều, nghỉ tay vài phút rồi thử lại nhé', HTTP_STATUS.TOO_MANY_REQUESTS, ERROR_CODES.TOO_MANY_REQUESTS)),
 });

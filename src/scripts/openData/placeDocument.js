@@ -26,6 +26,7 @@ export const toPlaceDocument = (record) => {
     address: record.address,
     district: record.district ?? '',
     category: kind.category,
+    kind: record.kind,
     location: { type: 'Point', coordinates: record.coordinates },
     opening_hours: { open: record.hours?.open ?? null, close: record.hours?.close ?? null },
     hours_known: Boolean(record.hours),

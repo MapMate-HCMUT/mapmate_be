@@ -44,12 +44,26 @@ const aiSessionSchema = new mongoose.Schema(
       type: [messageSchema],
       default: [],
     },
+
+    // ── Bổ sung cho AI Planner (Groq) ──
+    title: { type: String, default: '', trim: true }, // câu đầu tiên của người dùng (rút gọn) — hiện ở danh sách phiên
+    // Tiêu chí chuyến đi hiện tại (tripCriteriaSchema) — "bộ nhớ" để lượt sau hiểu "rẻ hơn", "gần hơn"...
+    criteria: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Điểm bắt buộc hiện tại (người dùng gọi tên / món đã chọn) — lượt "sửa lộ trình" giữ lại các điểm này
+    must_visit_ids: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+    // Yêu cầu đang chờ người dùng trả lời (hỏi lại / từ chối vì phi thực tế) — services/ai/pendingRequest.js
+    pending: { type: mongoose.Schema.Types.Mixed, default: null },
+    last_intent: { type: String, default: null },
+    model_tier: { type: String, default: null },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
     versionKey: false,
   }
 );
+
+// Danh sách phiên của 1 người, mới nhất trước
+aiSessionSchema.index({ user_id: 1, updated_at: -1 });
 
 const AiSession = mongoose.model('AiSession', aiSessionSchema);
 export default AiSession;

@@ -128,6 +128,7 @@ npm run places:fetch-overture       # -> data/open/overture_hcmc.geojsonseq (~45
 npm run places:fetch-osm            # -> data/open/osm_hcmc.json (~2 MB, qua Overpass API)
 npm run places:import -- --dry-run  # chỉ thống kê, KHÔNG ghi DB
 npm run places:import               # ghi vào `places` (~2 phút). Thêm --prune khi làm mới định kỳ (xem bên dưới)
+npm run places:link-venues -- --dry-run  # gắn quán / rạp nằm trong mall vào mall (places:import tự chạy bước này)
 ```
 
 - Chạy `seed:places` **trước** để 44 địa điểm nhóm tự nhập được giữ nguyên (dữ liệu mở trùng tên sẽ bị bỏ qua).
@@ -148,6 +149,47 @@ npm run places:import               # ghi vào `places` (~2 phút). Thêm --prun
 - Bật workflow: repo GitHub → Settings → Secrets and variables → Actions → thêm `MONGO_URI`; MongoDB Atlas → Network Access phải cho phép `0.0.0.0/0` (máy GitHub đổi IP mỗi lần chạy).
 - Báo cáo mỗi lần chạy: tab Actions → lần chạy → Artifacts → `import-report`.
 - Code: [src/scripts/importOpenPlaces.js](src/scripts/importOpenPlaces.js) + [src/scripts/openData/](src/scripts/openData) (ánh xạ loại hình + giá ước tính ở `placeKinds.js`, gộp trùng ở `placeMerger.js`, chuẩn hoá quận ở `districts.js`).
+
+## AI Planner (Groq) — `/ai-planner`
+
+Người dùng gõ yêu cầu tự do ("Tối nay 2 người đi hẹn hò Quận 1, 500k/người") → các Agent xử lý → lộ trình từ **dữ liệu thật** trong DB + lời tư vấn.
+
+| Bước | File | Việc làm |
+|---|---|---|
+| 0. Bộ lọc đầu vào | [inputGuard.js](src/services/ai/inputGuard.js) | Cắt ≤ 1.000 ký tự, che SĐT / email trước khi gửi ra ngoài, đánh dấu prompt injection |
+| 1. Hiểu yêu cầu | [interpreter.agent.js](src/services/ai/interpreter.agent.js) | Model **nhanh**, temperature 0, schema `mapmate_trip_request`: ý định, tiêu chí, thứ tự điểm dừng (`sequence`), bữa (`meals`), `food_tour`, `stop_count`, chất lượng yêu cầu (`ok / needs_info / unrealistic / not_allowed`), câu hỏi về địa điểm |
+| 2. Quyết định | [aiPlanner.service.js](src/services/ai/aiPlanner.service.js) | Không được phép → từ chối. Quá chung chung (chưa biết làm gì **và** ở đâu) → hỏi lại ≤ 2 câu kèm nút trả lời, **tối đa 1 lượt** ([pendingRequest.js](src/services/ai/pendingRequest.js) ghép câu trả lời vào yêu cầu cũ). Hỏi về 1 địa điểm → bước 2b |
+| 2b. Hỏi về địa điểm | [placeAnswer.agent.js](src/services/ai/placeAnswer.agent.js) | Giờ / giá / địa chỉ từ **DB**; bối cảnh từ **Wikipedia vi** (chỉ địa danh, bài phải cách ≤ 500 m); thời tiết **Open-Meteo**; ước tính đường đi. Mỗi ý ghi nguồn |
+| 3. Chuẩn hoá & neo vào DB | [criteriaBuilder.js](src/services/ai/criteriaBuilder.js) | Kẹp giới hạn, đổi "tối nay" / "ăn trưa" thành giờ, ước lượng thời lượng theo khuôn, tìm địa danh / món trong DB, ghi **giả định** |
+| 4. Kiểm tra khả thi | [feasibility.js](src/services/ai/feasibility.js) | "8 chỗ trong 1 tiếng", "buffet 50k", "ăn trưa + tối trong 2 tiếng" → từ chối kèm **con số** + phương án gần nhất (nút bấm) |
+| 5. Lên lộ trình | [itineraryPlanner.service.js](src/services/itineraryPlanner.service.js) | Khuôn theo vai trò ([tripComposer.js](src/services/tripComposer.js)) → lấp quán thật → kiểm tra luật ăn uống ([itineraryValidator.js](src/services/itineraryValidator.js)). Đi trong 48 giờ → kèm dự báo thời tiết |
+| 6. Tư vấn | [advisor.agent.js](src/services/ai/advisor.agent.js) | Model người dùng chọn, schema `mapmate_advice`: `option_key` / `place_id` chỉ được chọn trong dữ liệu thật => không bịa |
+| Dự phòng | [ruleInterpreter.js](src/services/ai/ruleInterpreter.js), [adviceTemplates.js](src/services/ai/adviceTemplates.js) | Chưa có key / Groq lỗi => hiểu câu theo luật + lời khuyên theo mẫu, vẫn chạy đủ các bước trên |
+
+**Luật ăn uống** ([constants/tripRules.js](src/constants/tripRules.js)) — mỗi điểm dừng có vai trò `meal` (bữa chính) / `snack` (ăn vặt) / `drink` (đồ uống) / `activity` (vui chơi), suy từ `Place.kind` + tên ([utils/visitRole.js](src/utils/visitRole.js)):
+- 2 bữa chính cách nhau ≥ 4 tiếng và nằm trong khung giờ ăn (sáng 6–10h, trưa 10:30–14:30, tối 17–21h, khuya 21–24h); tới sớm → "thời gian tự do" ≤ 90′ hoặc ở điểm vui chơi trước lâu hơn.
+- Tối đa 2 điểm ăn vặt (food tour: 4), cách nhau ≥ 45′; tối đa 2 điểm đồ uống, không liền nhau.
+- "Tìm chỗ ăn 400k" = 1 bữa chính + tráng miệng; "ăn trưa rồi cà phê" giữ đúng thứ tự người dùng nói.
+
+**Thời gian ở lại** ([utils/stayTime.js](src/utils/stayTime.js)) là 1 khoảng quanh `avg_visit_minutes`, không cố định: bún bò 40′ (30–60′), buffet 90′ (70–120′), mall 90′ (tới ~4 tiếng), rạp phim cố định theo suất. Nhóm đông +10′ mỗi 2 người (bữa chính tối đa +30′). Planner kéo dài trong khoảng này khi chờ tới giờ ăn hoặc khi người dùng chọn thời lượng dài hơn lộ trình; người dùng tự chỉnh ±15′ từng điểm (`/preview` với `keep_order` + `stay_overrides`, lưu kèm `stay_overrides`).
+
+**Điểm trong mall** ([constants/venues.js](src/constants/venues.js), [scripts/openData/venueLinker.js](src/scripts/openData/venueLinker.js)): quán / rạp nằm trong trung tâm thương mại được gắn `parent_place_id` (địa chỉ ghi tên mall ≤ 250 m, cùng số nhà + đường ≤ 150 m, hoặc "Tầng / Lầu..." ≤ 40 m). Hai điểm cùng mall => đi bộ 5′, 0đ. "Đi Vincom / đi mall chơi" => chuyến đi mall (`criteria.venue_id`): chọn mall (gọi tên, hoặc mall gần mà có nhiều quán bên trong), ưu tiên ăn / uống / xem phim bên trong, chờ giờ ăn = dạo mall.
+
+**Groq** (API tương thích OpenAI): structured outputs `strict: true` chỉ có ở `openai/gpt-oss-20b` (nhanh) và `openai/gpt-oss-120b` (thông minh). Chế độ strict không nhận `minLength / maxLength / pattern / minimum / maximum` → [aiSchemas.js](src/services/ai/aiSchemas.js) gỡ khỏi schema gửi đi, server vẫn kiểm tra đủ bằng Zod (sai khuôn → yêu cầu sửa 1 lần). 429 → chờ theo `retry-after` (≤ 8 giây) rồi thử lại 1 lần, sau đó chuyển dự phòng ([llmClient.js](src/services/ai/llmClient.js)). Gói miễn phí: 30 lượt / phút, 8.000 token / phút, 1.000 lượt / ngày.
+- Biến môi trường: `GROQ_API_KEY` (lấy ở console.groq.com/keys), tuỳ chọn `GROQ_MODEL_FAST`, `GROQ_MODEL_SMART`, `GROQ_BASE_URL`.
+- Nguồn ngoài (miễn phí, không cần key — [constants/externalSources.js](src/constants/externalSources.js)): Wikipedia vi (CC BY-SA 4.0, cache 7 ngày, **không** dùng cho giờ / giá), Open-Meteo (CC BY 4.0, phi thương mại < 10.000 lượt / ngày, cache theo ô ~1 km mỗi giờ). Giao diện luôn hiện nguồn + link.
+- Không ghi log nội dung câu chat. Giới hạn 20 lượt / 10 phút / IP. Test: `npm test`.
+
+| Method | Endpoint | Auth | Body | `data` trả về |
+|---|---|---|---|---|
+| GET | `/api/ai/options` | — | — | `{ llm_enabled, default_model, models[], examples[], prompt_max_length }` |
+| POST | `/api/ai/chat` | Tuỳ chọn | `{ message, session_id?, context?: { criteria, must_visit_ids, pending }, origin?, model: 'fast' \| 'smart' }` | `{ session_id, intent, reply, request_quality, clarifying_questions[], refusal: { kind, reasons, alternatives } \| null, place_answer \| null, weather \| null, understood, options[] (+ ai_note), places[] (+ ai_recommended), tips, warnings, follow_up_suggestions, pending, sources, trace[] }` |
+| POST | `/api/ai/recommend` | Tuỳ chọn | `{ message, location?, budget?, vehicle?, people?, model }` (Milestone 2) | Như `/chat` |
+| GET | `/api/ai/sessions` | Bearer | — | `{ items }` |
+| GET / DELETE | `/api/ai/sessions/:id` | Bearer | — | Lịch sử tin nhắn + tiêu chí đã nhớ |
+
+- Đã đăng nhập: lưu phiên vào `aisessions` (`criteria`, `must_visit_ids`, `pending` = bộ nhớ để lượt sau hiểu "rẻ hơn", "Quận 1"). Khách: frontend gửi lại `context` mỗi lượt (`pending` được kiểm tra lại đúng schema).
+- `understood.criteria` đúng chuẩn `tripCriteriaSchema` => dùng chung với `/api/itineraries/*` và bộ lọc Khám phá ("Chỉnh trong Khám phá").
 
 ## Kết nối: Bạn bè, Bảng tin, Ghim
 

@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test \"test/**/*.test.js\"",
     "start": "node src/server.js",
     "dev": "node --env-file=.env --watch src/server.js",
     "seed:users": "node --env-file=.env src/scripts/seedDemoUsers.js",
@@ -12,7 +12,8 @@
     "seed:social": "node --env-file=.env src/scripts/seedSocial.js",
     "places:fetch-overture": "node src/scripts/fetchOverturePlaces.js",
     "places:fetch-osm": "node src/scripts/fetchOsmPlaces.js",
-    "places:import": "node --env-file=.env src/scripts/importOpenPlaces.js"
+    "places:import": "node --env-file=.env src/scripts/importOpenPlaces.js",
+    "places:link-venues": "node --env-file=.env src/scripts/linkVenues.js"
   },
   "repository": {
     "type": "git",

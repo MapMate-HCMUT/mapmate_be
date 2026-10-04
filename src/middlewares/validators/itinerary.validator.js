@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { DEFAULT_ORIGIN, DURATION_FILTER, PEOPLE_FILTER, RADIUS_FILTER, TRIP_BUDGET_FILTER } from '../../constants/places.js';
+import { MEAL_VALUES, STAY_RANGE, VISIT_ROLE_VALUES } from '../../constants/tripRules.js';
 import { DEFAULT_VEHICLE } from '../../constants/transport.js';
 import { ITINERARY_MAX_STOPS, ITINERARY_NAME_MAX_LENGTH, ITINERARY_VISIBILITY } from '../../constants/social.js';
-import { hashtagList, objectIdList, timeOfDay } from './common.validator.js';
+import { hashtagList, objectId, objectIdList, timeOfDay } from './common.validator.js';
 import { categorySchema, customModeSchema, latitude, longitude, placeTagSchema, priceAmount, radiusKm, ratingFloor, vehicleSchema } from './place.validator.js';
 
 const DEFAULT_START_TIME = '09:00';
@@ -38,6 +39,13 @@ export const tripCriteriaSchema = z.object({
   duration_hours: z.coerce.number(DURATION_MESSAGE).int(DURATION_MESSAGE).min(DURATION_FILTER.min, DURATION_MESSAGE).max(DURATION_FILTER.max, DURATION_MESSAGE).default(DURATION_FILTER.default),
   open_only: z.boolean().default(false),
   district: z.string().trim().max(60).nullable().optional(),
+  // ── Khuôn lộ trình (AI Planner điền; bộ lọc Khám phá có thể bỏ trống) — xem services/tripComposer.js ──
+  sequence: z.array(z.enum(VISIT_ROLE_VALUES)).max(ITINERARY_MAX_STOPS).optional(), // thứ tự người dùng nói: ["meal", "drink"]
+  meals: z.array(z.enum(MEAL_VALUES)).max(MEAL_VALUES.length).optional(), // các bữa muốn ăn: ["lunch"]
+  food_tour: z.boolean().optional(), // đi ăn vặt nhiều món
+  stop_count: z.coerce.number().int().min(1).max(ITINERARY_MAX_STOPS).nullable().optional(), // "2–3 chỗ"
+  fill_duration: z.boolean().optional(), // false = thời lượng do hệ thống ước lượng => không kéo dài các điểm cho đủ giờ
+  venue_id: objectId('Trung tâm thương mại').nullable().optional(), // chuyến đi trong 1 mall => ưu tiên các điểm bên trong
 }).transform((criteria) => ({
   ...criteria,
   price_max: criteria.price_max ?? undefined,
@@ -47,9 +55,16 @@ export const tripCriteriaSchema = z.object({
 }));
 
 // POST /api/itineraries/preview
+// Thời gian ở lại người dùng tự chỉnh: { "<placeId>": phút }
+const stayOverrides = z
+  .record(objectId('Địa điểm'), z.coerce.number().int().min(STAY_RANGE.MIN_MINUTES).max(STAY_RANGE.MAX_MINUTES))
+  .default({});
+
 export const previewItinerarySchema = z.object({
   criteria: tripCriteriaSchema,
   place_ids: objectIdList(ITINERARY_MAX_STOPS, 1),
+  keep_order: z.boolean().default(false), // giữ đúng thứ tự (đang chỉnh 1 lộ trình đã gợi ý)
+  stay_overrides: stayOverrides,
 });
 
 // POST /api/itineraries/suggest
@@ -68,14 +83,24 @@ export const createItinerarySchema = z.object({
   start_time: timeOfDay.default(DEFAULT_START_TIME),
   origin: originSchema.default(DEFAULT_ORIGIN),
   criteria: tripCriteriaSchema.nullable().optional(),
+  stay_overrides: stayOverrides, // giữ đúng thời gian ở lại đang thấy trên lộ trình gợi ý / đã chỉnh
   tags: hashtagList.default([]),
   visibility: z.enum(Object.values(ITINERARY_VISIBILITY)).default(ITINERARY_VISIBILITY.PRIVATE),
 });
 
 // PATCH /api/itineraries/:id
-export const updateItinerarySchema = z.strictObject({
+export const updateItinerarySchema = z.object({
   name: z.string().trim().min(1).max(ITINERARY_NAME_MAX_LENGTH).optional(),
+  place_ids: objectIdList(ITINERARY_MAX_STOPS, 1).optional(),
+  vehicle: vehicleSchema.optional(),
+  transport_modes: transportModes.optional(),
+  people: peopleSchema.optional(),
+  start_time: timeOfDay.optional(),
+  origin: originSchema.optional(),
+  criteria: tripCriteriaSchema.nullable().optional(),
+  stay_overrides: stayOverrides.optional(),
   visibility: z.enum(Object.values(ITINERARY_VISIBILITY)).optional(),
   tags: hashtagList.optional(),
   status: z.enum(['active', 'completed', 'cancelled']).optional(),
 }).refine((changes) => Object.keys(changes).length > 0, 'Không có thông tin nào để cập nhật');
+

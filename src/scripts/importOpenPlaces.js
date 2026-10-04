@@ -14,6 +14,7 @@ import { createDistrictInferer } from './openData/districts.js';
 import { toPlaceDocument } from './openData/placeDocument.js';
 import { PlaceMerger } from './openData/placeMerger.js';
 import { pruneStalePlaces, reopenReturnedPlaces } from './openData/prunePlaces.js';
+import { linkVenues } from './openData/venueLinker.js';
 import { readOsm, readOverture } from './openData/readers.js';
 
 const REPORT_FILE = 'data/open/import-report.json';
@@ -80,6 +81,8 @@ if (!dryRun) {
 const keptRefs = sources.map((doc) => doc.source_ref);
 const reopened = dryRun ? 0 : await reopenReturnedPlaces(keptRefs);
 const pruned = !dryRun && prune ? await pruneStalePlaces(keptRefs) : null;
+// 6. Gắn quán / rạp nằm trong mall vào mall đó (lộ trình biết "ăn rồi dạo" là cùng 1 nơi)
+const venues = dryRun ? null : await linkVenues();
 
 const report = {
   finished_at: new Date().toISOString(),
@@ -100,7 +103,7 @@ const report = {
     with_cuisine: sources.filter((doc) => doc.cuisines.length).length,
     by_district: countBy(sources, (doc) => doc.district || '(chưa rõ)'),
   },
-  write: dryRun ? null : { upserted, modified, reopened, pruned },
+  write: dryRun ? null : { upserted, modified, reopened, pruned, venues },
 };
 await mkdir('data/open', { recursive: true });
 await writeFile(REPORT_FILE, JSON.stringify(report, null, 2));
@@ -109,5 +112,5 @@ console.log(`${dryRun ? '🔍 [DRY RUN — không ghi DB]' : '✅'} ${documents.
 console.log('   Theo loại:', report.output.by_category);
 console.log('   Theo nguồn:', report.output.by_source, '· gộp Overture+OSM:', report.output.merged_overture_osm);
 console.log(`   Có giờ mở cửa: ${report.output.with_opening_hours} · có quận: ${report.output.with_district} (đoán ${inferredDistricts}) · trùng dữ liệu nhóm: ${merger.stats.matchedCurated}`);
-if (!dryRun) console.log(`   Thêm mới ${upserted}, cập nhật ${modified}${pruned ? ` · xoá ${pruned.deleted} nơi không còn trong nguồn, đánh dấu đóng cửa ${pruned.closed_in_use} nơi đang được dùng` : ''} · mở lại ${reopened}`);
+if (!dryRun) console.log(`   Thêm mới ${upserted}, cập nhật ${modified}${pruned ? ` · xoá ${pruned.deleted} nơi không còn trong nguồn, đánh dấu đóng cửa ${pruned.closed_in_use} nơi đang được dùng` : ''} · mở lại ${reopened} · gắn ${venues.linked} điểm vào ${venues.malls} mall`);
 await mongoose.disconnect();
