@@ -34,3 +34,64 @@ export const loginUser = async ({ email, password }) => {
   }
   return { token: signAccessToken(user._id), user: toPublicProfile(user) };
 };
+
+export const googleLoginUser = async ({ credential, email, name, picture, google_id }) => {
+  let googleEmail = email;
+  let googleName = name;
+  let googleAvatar = picture;
+  let googleSub = google_id;
+
+  if (credential) {
+    try {
+      const parts = credential.split('.');
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        googleEmail = payload.email || googleEmail;
+        googleName = payload.name || payload.given_name || googleName;
+        googleAvatar = payload.picture || googleAvatar;
+        googleSub = payload.sub || googleSub;
+      }
+    } catch {
+      // ignore decode error
+    }
+  }
+
+  if (!googleEmail) {
+    throw new AppError('Không tìm thấy thông tin email từ tài khoản Google', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  let user = await User.findOne({ email: googleEmail.toLowerCase() });
+  if (!user) {
+    let baseUsername = (googleName || googleEmail.split('@')[0])
+      .replace(/[^a-zA-Z0-9_]/g, '')
+      .slice(0, 16) || 'user';
+    let username = baseUsername;
+    let counter = 1;
+    while (await User.findOne({ username })) {
+      username = `${baseUsername.slice(0, 12)}_${counter++}`;
+    }
+
+    user = await User.create({
+      email: googleEmail.toLowerCase(),
+      username,
+      avatar_url: googleAvatar || null,
+      google_id: googleSub || null,
+      password: null,
+    });
+
+    await notifyUser(user._id, {
+      type: NOTIFICATION_TYPES.WELCOME,
+      icon: '👋',
+      title: `Chào mừng ${user.username} đến với MapMate!`,
+      body: 'Khám phá bản đồ, check-in địa điểm và lập lộ trình cùng AI nhé.',
+      link: '/',
+    });
+  } else {
+    if (!user.avatar_url && googleAvatar) {
+      user.avatar_url = googleAvatar;
+      await user.save();
+    }
+  }
+
+  return { token: signAccessToken(user._id), user: toPublicProfile(user) };
+};
