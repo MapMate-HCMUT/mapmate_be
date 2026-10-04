@@ -18,7 +18,24 @@ const JSON_BODY_LIMIT = '100kb';
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: env.corsOrigins }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        env.corsOrigins.includes('*') ||
+        env.corsOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1')
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  }),
+);
 app.use('/places', express.static(path.join(__dirname, '../public/places')));
 // Route upload ảnh đại diện tự parse với giới hạn lớn hơn (xem user.routes.js).
 const AVATAR_UPLOAD_PATH = '/api/users/me/avatar';
