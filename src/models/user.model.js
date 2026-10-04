@@ -29,7 +29,8 @@ const userSchema = new mongoose.Schema(
   {
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     username: { type: String, required: true, trim: true, minlength: USERNAME_MIN_LENGTH, maxlength: USERNAME_DB_MAX_LENGTH },
-    password: { type: String, required: true, select: false }, // không bao giờ trả về trừ khi .select('+password')
+    password: { type: String, required: false, select: false, default: null }, // không bao giờ trả về trừ khi .select('+password')
+    google_id: { type: String, default: null, sparse: true },
     avatar_url: { type: String, default: null },
     level: { type: Number, default: 1, min: 1 },
     xp: { type: Number, default: 0, min: 0 },
@@ -59,11 +60,12 @@ userSchema.index({ username: 1 }, { unique: true, collation: { locale: 'vi', str
 userSchema.index({ xp: -1, _id: 1 });
 
 userSchema.pre('save', async function hashPassword() {
-  if (!this.isModified('password')) return;
+  if (!this.isModified('password') || !this.password) return;
   this.password = await bcrypt.hash(this.password, BCRYPT_ROUNDS);
 });
 
 userSchema.methods.comparePassword = function comparePassword(plainPassword) {
+  if (!this.password) return false;
   return bcrypt.compare(plainPassword, this.password);
 };
 
