@@ -180,6 +180,17 @@ Người dùng gõ yêu cầu tự do ("Tối nay 2 người đi hẹn hò Quậ
 - Nguồn ngoài (miễn phí, không cần key — [constants/externalSources.js](src/constants/externalSources.js)): Wikipedia vi (CC BY-SA 4.0, cache 7 ngày, **không** dùng cho giờ / giá), Open-Meteo (CC BY 4.0, phi thương mại < 10.000 lượt / ngày, cache theo ô ~1 km mỗi giờ). Giao diện luôn hiện nguồn + link.
 - Không ghi log nội dung câu chat. Giới hạn 20 lượt / 10 phút / IP. Test: `npm test`.
 
+**An toàn nội dung** ([constants/aiSafety.js](src/constants/aiSafety.js), [services/ai/safety/](src/services/ai/safety)) — 3 lớp, chặn quyền riêng tư (tìm nhà / SĐT / vị trí / theo dõi 1 người), người lớn, chất cấm, bạo lực, xúc phạm, tự hại và "bẻ khoá" (jailbreak):
+1. Luật trong code (tức thì, so cả chữ bỏ dấu + chữ viết tách "c.ầ.n s.a") — bắt được thì không gửi gì cho Groq.
+2. `meta-llama/llama-prompt-guard-2-86m` (chống jailbreak) + 3. `openai/gpt-oss-safeguard-20b` (theo chính sách MapMate) — chạy song song với bước hiểu yêu cầu. Safeguard gói miễn phí chỉ 2.000 token/phút => hết hạn mức thì bước hiểu yêu cầu tự gắn `safety_category` (không hở).
+Bị chặn => lý do rõ ràng + câu hỏi thay thế (ưu tiên theo ghi nhớ); tự hại => trả lời quan tâm + đường dây hỗ trợ.
+
+**Ghi nhớ của AI** ([services/ai/memory.service.js](src/services/ai/memory.service.js), collection `aimemories`, chỉ người đã đăng nhập): tự học phương tiện / số người / ngân sách / khu vực / món / phong cách (lặp lại ≥ 2 lần mới ghi nhớ) + ghi chú khi người dùng nói "nhớ giúp mình là…" ("quên hết" để xoá). Dùng để điền chỗ trống (ghi chú "Theo ghi nhớ: …"), cho model bối cảnh (VD ăn chay => chỉ chọn quán chay) và gợi ý câu hỏi. Người dùng xem / xoá từng mục / tắt ở trang AI Planner.
+
+**Giọng nói** (`POST /api/ai/transcribe`, body là file âm thanh thô `audio/*` ≤ 4 MB): Groq `whisper-large-v3-turbo`, tự nhận tiếng Việt / tiếng Anh; âm thanh không lưu lại. Bỏ kết quả "bịa" khi không có tiếng nói.
+
+**Giới hạn tần suất** ([constants/rateLimits.js](src/constants/rateLimits.js)) — theo tài khoản (đã đăng nhập) hoặc IP: mọi `/api` 300/phút; tìm địa điểm 90/phút; gợi ý / xem trước lộ trình 40/phút; AI chat 20 / 10 phút; giọng nói 20 / 10 phút. Thêm "ngân sách" Groq cho cả server (~25 lượt/phút/model) — sắp hết thì dùng bản dự phòng ngay thay vì để Groq trả 429. Chạy sau reverse proxy => đặt `TRUST_PROXY=1`.
+
 | Method | Endpoint | Auth | Body | `data` trả về |
 |---|---|---|---|---|
 | GET | `/api/ai/options` | — | — | `{ llm_enabled, default_model, models[], examples[], prompt_max_length }` |
@@ -187,6 +198,9 @@ Người dùng gõ yêu cầu tự do ("Tối nay 2 người đi hẹn hò Quậ
 | POST | `/api/ai/recommend` | Tuỳ chọn | `{ message, location?, budget?, vehicle?, people?, model }` (Milestone 2) | Như `/chat` |
 | GET | `/api/ai/sessions` | Bearer | — | `{ items }` |
 | GET / DELETE | `/api/ai/sessions/:id` | Bearer | — | Lịch sử tin nhắn + tiêu chí đã nhớ |
+| GET / PATCH / DELETE | `/api/ai/memory` | Bearer | PATCH `{ enabled }` | `{ enabled, facts, notes[], summary, suggestions[] }` (DELETE = xoá hết) |
+| DELETE | `/api/ai/memory/facts/:key`, `/api/ai/memory/notes/:id` | Bearer | — | Ghi nhớ sau khi xoá 1 mục |
+| POST | `/api/ai/transcribe` | Tuỳ chọn | file âm thanh (`Content-Type: audio/webm`…) | `{ text, language }` |
 
 - Đã đăng nhập: lưu phiên vào `aisessions` (`criteria`, `must_visit_ids`, `pending` = bộ nhớ để lượt sau hiểu "rẻ hơn", "Quận 1"). Khách: frontend gửi lại `context` mỗi lượt (`pending` được kiểm tra lại đúng schema).
 - `understood.criteria` đúng chuẩn `tripCriteriaSchema` => dùng chung với `/api/itineraries/*` và bộ lọc Khám phá ("Chỉnh trong Khám phá").

@@ -198,6 +198,26 @@ const resolveTripMall = async ({ criteria, mustVisit, interpretation, notes }) =
   return mall;
 };
 
+// ── Điền chỗ trống từ ghi nhớ ──
+const VEHICLE_NAMES = { bike: 'xe máy', car: 'ô tô', walk: 'đi bộ', public: 'xe buýt / metro' };
+const rememberedVehicle = (remembered, notes) => {
+  if (!remembered?.vehicle) return null;
+  notes.push(`${MEMORY_NOTE_PREFIX} bạn thường đi ${VEHICLE_NAMES[remembered.vehicle] ?? remembered.vehicle}`);
+  return remembered.vehicle;
+};
+const rememberedBudget = (remembered, intent, notes) => {
+  if (!remembered?.budget_per_person || intent === AI_INTENTS.FIND_PLACES) return null;
+  notes.push(`${MEMORY_NOTE_PREFIX} ngân sách thường khoảng ${formatVnd(remembered.budget_per_person)}/người`);
+  return remembered.budget_per_person;
+};
+// Ăn chay (đã ghi nhớ) + chuyến có ăn uống => tìm thêm quán chay
+const withDietKeyword = (interpreted, remembered, notes) => {
+  const wantsFood = !interpreted.categories.length || interpreted.categories.includes('food');
+  if (remembered?.diet !== 'chay' || !wantsFood || interpreted.keywords.some((keyword) => /chay/i.test(keyword))) return interpreted.keywords;
+  notes.push(`${MEMORY_NOTE_PREFIX} bạn ăn chay — ưu tiên quán chay`);
+  return ['chay', ...interpreted.keywords];
+};
+
 const STICKY_FIELDS = ['origin', 'people', 'vehicle'];
 const pickSticky = (criteria) => (criteria ? Object.fromEntries(STICKY_FIELDS.filter((key) => criteria[key] != null).map((key) => [key, criteria[key]])) : null);
 
@@ -207,7 +227,12 @@ const toOrigin = (place) => ({ lng: place.location.coordinates[0], lat: place.lo
  * @param {{ interpretation, previousCriteria, previousMustVisitIds, clientOrigin, now }} input
  * @returns {{ criteria, mustInclude: Place[], exclude: Place[], keywordPlaces: Place[], assumptions: string[] }}
  */
-export const buildCriteria = async ({ interpretation, previousCriteria = null, previousMustVisitIds = [], clientOrigin: rawClientOrigin = null, now = vietnamNow() }) => {
+// Giá trị lấy từ ghi nhớ của người dùng luôn được ghi chú bằng tiền tố này (giao diện + bộ điều phối nhận ra)
+export const MEMORY_NOTE_PREFIX = 'Theo ghi nhớ:';
+
+export const buildCriteria = async ({ interpretation, previousCriteria = null, previousMustVisitIds = [], clientOrigin: rawClientOrigin = null, now = vietnamNow(), memory = null }) => {
+  // Sở thích đã ghi nhớ chỉ dùng để ĐIỀN CHỖ TRỐNG (người dùng nói gì thì theo đó), và luôn ghi chú cho người dùng thấy
+  const remembered = memory?.enabled ? memory.facts : null;
   const clientOrigin = rawClientOrigin && { ...rawClientOrigin, label: rawClientOrigin.label || 'Vị trí của bạn' };
   const { intent, criteria: interpreted, places_mentioned: mentions } = interpretation;
   const isRefine = intent === AI_INTENTS.REFINE_TRIP && Boolean(previousCriteria);
@@ -238,8 +263,8 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
   if (district && !districtCenter) notes.push(`Chưa có dữ liệu cho "${interpreted.district}"`);
 
   // 2. Thông số chuyến đi
-  const people = interpreted.people ?? base?.people ?? PEOPLE_FILTER.default;
-  if (!interpreted.people && !base?.people) notes.push(`Chưa nói số người — tính cho ${people} người`);
+  const people = interpreted.people ?? base?.people ?? remembered?.people ?? PEOPLE_FILTER.default;
+  if (!interpreted.people && !base?.people) notes.push(remembered?.people ? `${MEMORY_NOTE_PREFIX} bạn thường đi ${people} người` : `Chưa nói số người — tính cho ${people} người`);
   const shape = {
     sequence: interpreted.sequence.length ? interpreted.sequence : isRefine ? base.sequence ?? [] : [],
     meals: interpreted.meals.length ? interpreted.meals : isRefine ? base.meals ?? [] : [],
@@ -259,9 +284,9 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
     tags: isRefine ? uniq([...(base.tags ?? []), ...interpreted.tags]) : interpreted.tags,
     price_min: priceLimits.price_min ?? (isRefine ? base.price_min : 0),
     price_max: priceLimits.price_max ?? (isRefine ? base.price_max ?? null : null),
-    trip_budget: resolveBudget(interpreted, base, people, isRefine, notes),
+    trip_budget: resolveBudget(interpreted, base, people, isRefine, notes) ?? rememberedBudget(remembered, intent, notes),
     people: clamp(people, PEOPLE_FILTER),
-    vehicle: interpreted.vehicle ?? base?.vehicle ?? DEFAULT_VEHICLE,
+    vehicle: interpreted.vehicle ?? base?.vehicle ?? rememberedVehicle(remembered, notes) ?? DEFAULT_VEHICLE,
     transport_modes: [],
     ...(radiusKm ? { radius_km: radiusKm } : {}),
     min_rating: interpreted.min_rating ?? (isRefine ? base.min_rating ?? null : null),
@@ -269,6 +294,7 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
     duration_hours: clamp(durationHours, DURATION_FILTER),
     open_only: interpreted.open_only ?? (liveTrip || (isRefine && Boolean(base.open_only))),
     ...shape,
+    diet: remembered?.diet === 'chay' || interpreted.keywords.some((keyword) => /chay/i.test(keyword)) ? 'chay' : null,
     fill_duration: interpreted.duration_hours != null || (isRefine && base.fill_duration === true), // chỉ kéo dài cho đủ giờ khi người dùng nói thời lượng
     district: null, // lọc theo vòng bán kính quanh tâm quận thay vì ranh giới cứng (quán sát ranh vẫn được tính)
   });
@@ -278,7 +304,7 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
 
   // 4. Món cụ thể ("ốc", "lẩu") => chọn 1 quán tốt nhất gần điểm xuất phát (hoặc trong mall) làm điểm bắt buộc
   const keywordPlaces = [];
-  const keywords = interpretation.criteria.keywords.filter((keyword) => !GENERIC_KEYWORDS.has(keyword.trim().toLowerCase()) && !isMallTripWord(keyword));
+  const keywords = withDietKeyword(interpretation.criteria, remembered, notes).filter((keyword) => !GENERIC_KEYWORDS.has(keyword.trim().toLowerCase()) && !isMallTripWord(keyword));
   // Người dùng đã gọi tên quán ("ăn Haidilao") => không tìm thêm quán cho từ khoá cùng vai trò ("lẩu") — tránh 2 bữa lẩu
   const namedRoles = new Set(mentioned.mustVisit.map(getVisitRole));
   for (const keyword of keywords.slice(0, MAX_KEYWORD_STOPS)) {

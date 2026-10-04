@@ -44,6 +44,7 @@ export const tripCriteriaSchema = z.object({
   meals: z.array(z.enum(MEAL_VALUES)).max(MEAL_VALUES.length).optional(), // các bữa muốn ăn: ["lunch"]
   food_tour: z.boolean().optional(), // đi ăn vặt nhiều món
   stop_count: z.coerce.number().int().min(1).max(ITINERARY_MAX_STOPS).nullable().optional(), // "2–3 chỗ"
+  diet: z.enum(['chay']).nullable().optional(), // ăn chay => mọi điểm ăn chọn quán chay (nếu có trong khu vực)
   fill_duration: z.boolean().optional(), // false = thời lượng do hệ thống ước lượng => không kéo dài các điểm cho đủ giờ
   venue_id: objectId('Trung tâm thương mại').nullable().optional(), // chuyến đi trong 1 mall => ưu tiên các điểm bên trong
 }).transform((criteria) => ({

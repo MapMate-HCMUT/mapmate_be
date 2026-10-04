@@ -1,6 +1,8 @@
 import { AI_EXAMPLE_PROMPTS, AI_MODEL_DEFAULTS, AI_PROMPT_MAX_LENGTH, AI_DEFAULT_TIER } from '../constants/ai.js';
 import { chatWithPlanner } from '../services/ai/aiPlanner.service.js';
 import { deleteSession, getSession, listSessions } from '../services/ai/aiSession.service.js';
+import { transcribeAudio } from '../services/ai/transcribe.service.js';
+import { clearMemory, forgetFact, forgetNote, getMemoryView, setMemoryEnabled } from '../services/ai/memory.service.js';
 import { isLlmConfigured, resolveModelId } from '../services/ai/llmClient.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess } from '../utils/response.js';
@@ -38,3 +40,13 @@ export const removeMySession = asyncHandler(async (req, res) => {
   await deleteSession(req.user.id, req.validated.params.id);
   return sendSuccess(res, { message: 'Đã xoá cuộc trò chuyện' });
 });
+
+// ── Ghi nhớ của AI (chỉ người đã đăng nhập) ──
+export const getMyMemory = asyncHandler(async (req, res) => sendSuccess(res, { data: await getMemoryView(req.user.id) }));
+export const updateMyMemory = asyncHandler(async (req, res) => sendSuccess(res, { data: await setMemoryEnabled(req.user.id, req.validated.body.enabled) }));
+export const clearMyMemory = asyncHandler(async (req, res) => sendSuccess(res, { message: 'Đã xoá toàn bộ ghi nhớ', data: await clearMemory(req.user.id) }));
+export const forgetMyFact = asyncHandler(async (req, res) => sendSuccess(res, { data: await forgetFact(req.user.id, req.validated.params.key) }));
+export const forgetMyNote = asyncHandler(async (req, res) => sendSuccess(res, { data: await forgetNote(req.user.id, req.validated.params.id) }));
+
+// POST /api/ai/transcribe — body là file âm thanh thô (Content-Type: audio/webm...) => { text, language }
+export const transcribe = asyncHandler(async (req, res) => sendSuccess(res, { data: await transcribeAudio(req.body, req.headers['content-type']) }));

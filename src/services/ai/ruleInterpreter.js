@@ -3,11 +3,13 @@
 // số người, món ăn, phong cách, quận, phương tiện. Kém LLM ở câu phức tạp nhưng luôn trả đúng schema.
 import { AI_INTENTS, AI_PLACE_ROLES, REQUEST_QUALITY } from '../../constants/ai.js';
 import { MALL_TRIP_KEYWORD, MALL_TRIP_WORDS } from '../../constants/venues.js';
+import { SAFETY_CATEGORIES, SAFETY_REPLIES } from '../../constants/aiSafety.js';
+import { moderateByRules } from './safety/ruleModeration.js';
 import { DISTRICT_NAMES } from '../../utils/district.js';
 import { normalizeSearchText } from '../../utils/text.js';
 import { interpretationSchema } from './aiSchemas.js';
 import { questionsFor } from './clarifyQuestions.js';
-import { detectNotAllowed, detectPlaceQuestion, extractMeals, extractSequence, extractStopCount, isFoodTour, mentionsOtherCity } from './ruleSignals.js';
+import { detectPlaceQuestion, extractMeals, extractSequence, extractStopCount, isFoodTour, mentionsOtherCity } from './ruleSignals.js';
 
 const THOUSAND = 1000;
 const MILLION = 1000000;
@@ -194,7 +196,8 @@ export const interpretWithRules = (text, { previousCriteria = null, askedBefore 
   };
   const signals = [criteria.people, criteria.budget_per_person, criteria.budget_total, criteria.start_time, criteria.vehicle, district].filter((value) => value != null).length + categories.length + tags.length;
   const placeQuestion = detectPlaceQuestion(text, lower);
-  const refusal = detectNotAllowed(lower);
+  const flagged = moderateByRules(text);
+  const refusal = flagged ? SAFETY_REPLIES[flagged.category] : null;
   let intent = detectIntent(lower, { hasPrevious: Boolean(previousCriteria), signals });
   if (placeQuestion && !criteria.sequence.length) intent = AI_INTENTS.ASK_PLACE;
   if (mentionsOtherCity(lower)) intent = AI_INTENTS.OUT_OF_SCOPE;
@@ -205,6 +208,7 @@ export const interpretWithRules = (text, { previousCriteria = null, askedBefore 
     confidence: signals >= 3 ? 0.7 : signals > 0 ? 0.5 : 0.3,
     ...quality,
     ...(intent === AI_INTENTS.OUT_OF_SCOPE && !refusal ? { refusal_reason: 'MapMate hiện chỉ có dữ liệu đi chơi, ăn uống ở TP.HCM.' } : {}),
+    safety_category: flagged?.category ?? SAFETY_CATEGORIES.NONE,
     criteria,
     place_question: placeQuestion ?? { place_name: null, topics: [] },
     places_mentioned: placesMentioned,

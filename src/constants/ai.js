@@ -74,6 +74,9 @@ export const AI_PLACE_LOOKUP_RADIUS_KM = 20;
 export const AI_ERROR_CODES = {
   AI_UNAVAILABLE: 'AI_UNAVAILABLE',
   AI_SESSION_NOT_FOUND: 'AI_SESSION_NOT_FOUND',
+  AI_MEMORY_NOT_FOUND: 'AI_MEMORY_NOT_FOUND',
+  VOICE_UNSUPPORTED: 'VOICE_UNSUPPORTED',
+  VOICE_EMPTY: 'VOICE_EMPTY',
 };
 
 // Câu mẫu gợi ý trên giao diện
@@ -83,3 +86,24 @@ export const AI_EXAMPLE_PROMPTS = [
   'Mình đang ở Landmark 81, muốn đi cà phê yên tĩnh làm việc chiều nay',
   'Nhóm 5 đứa sinh viên, đi chơi đêm ở Quận 4 ăn ốc, rẻ thôi',
 ];
+
+// Ghi nhớ của AI về người dùng (đã đăng nhập) — services/ai/memory.service.js. Người dùng xem / xoá / tắt được bất cứ lúc nào.
+export const AI_MEMORY = {
+  LEARN_MIN_COUNT: 2, // 1 giá trị phải lặp lại ≥ 2 lần mới thành "sở thích" (tránh ghi nhớ nhầm từ 1 lần nói)
+  MAX_NOTES: 10,
+  NOTE_MAX_LENGTH: 120,
+  MAX_FAVORITES: 3,
+  BUDGET_STEP: 50000,
+  RECENT_BUDGETS: 5,
+};
+// Các mục người dùng xoá riêng được
+export const AI_MEMORY_FACT_KEYS = ['vehicle', 'people', 'budget_per_person', 'diet', 'favorite_areas', 'favorite_foods', 'likes'];
+
+// Nhận dạng giọng nói (ô tìm kiếm + AI Planner) — Groq Whisper: miễn phí, tự nhận tiếng Việt / tiếng Anh (kể cả nói xen kẽ).
+export const VOICE = {
+  MODEL: 'whisper-large-v3-turbo',
+  MAX_BYTES: 4 * 1024 * 1024, // ~4 phút webm/opus — giao diện tự dừng sau 20 giây
+  MIME_TYPES: ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/m4a', 'audio/x-m4a'],
+  TIMEOUT_MS: 20000,
+  LANGUAGES: ['vi', 'en'],
+};

@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { DB_STATE } from './constants/database.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
+import { globalRateLimiter } from './middlewares/rateLimiter.js';
 import { sanitizeRequest } from './middlewares/sanitize.middleware.js';
 import { apiRouter } from './routes/index.js';
 
@@ -16,6 +17,8 @@ const __dirname = path.dirname(__filename);
 const JSON_BODY_LIMIT = '100kb';
 
 const app = express();
+// Chạy sau reverse proxy (Nginx, Render...) => đặt TRUST_PROXY=1 để rate limit đếm đúng IP người dùng, không phải IP của proxy
+if (env.trustProxy) app.set('trust proxy', env.trustProxy);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: env.corsOrigins }));
@@ -35,7 +38,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.use('/api', apiRouter);
+app.use('/api', globalRateLimiter, apiRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

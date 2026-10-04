@@ -7,6 +7,7 @@ import { AI_INTENT_VALUES, AI_MAX_CLARIFYING_QUESTIONS, AI_PLACE_ROLES, AI_VEHIC
 import { MEAL_VALUES, VISIT_ROLE_VALUES } from '../../constants/tripRules.js';
 import { EXPLORE_CATEGORIES, PLACE_TAG_VALUES } from '../../constants/places.js';
 import { PLACE_INFO_SOURCES } from '../../constants/externalSources.js';
+import { SAFETY_CATEGORY_VALUES } from '../../constants/aiSafety.js';
 
 const CATEGORY_VALUES = EXPLORE_CATEGORIES.map((category) => category.value);
 export const PRICE_LEVELS = ['cheap', 'moderate', 'upscale'];
@@ -23,6 +24,8 @@ export const interpretationSchema = z.object({
   // Hỏi lại (tối đa 2 câu), mỗi câu kèm vài đáp án ngắn để người dùng bấm
   clarifying_questions: z.array(z.object({ question: z.string().max(160), options: z.array(z.string().max(40)).max(4) })).max(AI_MAX_CLARIFYING_QUESTIONS),
   refusal_reason: z.string().max(200).nullable(), // vì sao không làm được (phi thực tế / không được phép)
+  // Nhãn an toàn (constants/aiSafety.js) — lớp kiểm duyệt dự phòng khi gpt-oss-safeguard hết hạn mức
+  safety_category: z.enum(SAFETY_CATEGORY_VALUES),
   criteria: z.object({
     categories: z.array(z.enum(CATEGORY_VALUES)).max(6),
     tags: z.array(z.enum(PLACE_TAG_VALUES)).max(6),

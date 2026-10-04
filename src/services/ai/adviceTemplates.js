@@ -36,7 +36,10 @@ export const buildClarifyReply = (questions) => ({
 
 // Từ chối: phi thực tế (giải thích bằng con số + phương án gần nhất) hoặc không được phép
 export const buildRefusalReply = ({ kind, reasons, alternatives }) => {
-  if (kind === 'not_allowed') return { ...empty, reply: `${reasons[0] ?? 'Yêu cầu này nằm ngoài những gì MapMate hỗ trợ.'} Mình có thể giúp bạn tìm chỗ ăn uống, vui chơi ở TP.HCM.`, follow_up_suggestions: ['Gợi ý quán cà phê yên tĩnh', 'Lên lộ trình tối nay'] };
+  if (kind === 'not_allowed') {
+    const offer = alternatives.length ? ' Bạn có thể thử hỏi:' : ' Mình có thể giúp bạn tìm chỗ ăn uống, vui chơi ở TP.HCM.';
+    return { ...empty, reply: `${reasons[0] ?? 'Yêu cầu này nằm ngoài những gì MapMate hỗ trợ.'}${offer}`, follow_up_suggestions: alternatives.length ? alternatives : ['Gợi ý quán cà phê yên tĩnh', 'Lên lộ trình tối nay'] };
+  }
   const fallback = alternatives.length ? ` Bạn có thể chọn: ${alternatives.join(' / ')}.` : ' Bạn điều chỉnh lại ngân sách hoặc thời gian giúp mình nhé.';
   return { ...empty, reply: `Yêu cầu này khó thực hiện: ${reasons.join(' ')}${fallback}`, follow_up_suggestions: alternatives };
 };
