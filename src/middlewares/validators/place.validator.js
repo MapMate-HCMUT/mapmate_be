@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   DEFAULT_PLACE_SORT,
+  PLACE_REPORT_TYPES,
   EXPLORE_CATEGORIES,
   PLACE_SEARCH_DEFAULT_LIMIT,
   PLACE_SEARCH_MAX_LIMIT,
@@ -22,6 +23,11 @@ const RADIUS_MESSAGE = `Bán kính từ ${RADIUS_FILTER.min} đến ${RADIUS_FIL
 export const radiusKm = z.coerce.number(RADIUS_MESSAGE).min(RADIUS_FILTER.min, RADIUS_MESSAGE).max(RADIUS_FILTER.max, RADIUS_MESSAGE);
 export const priceAmount = z.coerce.number('Số tiền không hợp lệ').int('Số tiền không hợp lệ').min(0, 'Số tiền không được âm');
 export const ratingFloor = z.coerce.number('Điểm đánh giá từ 0 đến 5').min(0, 'Điểm đánh giá từ 0 đến 5').max(5, 'Điểm đánh giá từ 0 đến 5');
+
+// POST /api/places/:id/reports — báo quán đã đóng cửa / vẫn mở
+export const placeReportSchema = z.object({
+  type: z.enum(Object.values(PLACE_REPORT_TYPES), 'Chọn "đã đóng cửa" hoặc "vẫn mở"'),
+});
 
 // GET /api/places/nearby
 export const nearbyQuerySchema = z.object({

@@ -2,7 +2,7 @@
 // Frontend lấy qua GET /api/places/filter-options => chỉ cần sửa ở đây.
 
 // Toàn bộ giá trị hợp lệ của Place.category (khớp enum trong models/Place.model.js)
-export const PLACE_CATEGORY_VALUES = ['food', 'cafe', 'attraction', 'entertainment', 'shopping', 'hotel', 'transport', 'other'];
+export const PLACE_CATEGORY_VALUES = ['food', 'cafe', 'attraction', 'entertainment', 'park', 'shopping', 'hotel', 'transport', 'other'];
 
 // Các loại hình hiển thị trong bộ lọc "đi chơi"
 export const EXPLORE_CATEGORIES = [
@@ -10,6 +10,7 @@ export const EXPLORE_CATEGORIES = [
   { value: 'cafe', label: 'Cà phê', emoji: '☕' },
   { value: 'attraction', label: 'Tham quan', emoji: '🏛️' },
   { value: 'entertainment', label: 'Giải trí', emoji: '🎭' },
+  { value: 'park', label: 'Công viên', emoji: '🎡' }, // công viên, khu vui chơi (Suối Tiên, Đầm Sen), sở thú
   { value: 'shopping', label: 'Mua sắm', emoji: '🛍️' },
 ];
 
@@ -52,12 +53,27 @@ export const DEFAULT_PLACE_SORT = 'recommended';
  * Sắp xếp "Đề xuất": điểm = tổng có trọng số (cao hơn = lên trước). Dữ liệu mở có hàng chục nghìn nơi chưa ai đánh giá,
  * nên ưu tiên nơi đã kiểm chứng (có đánh giá), biết giờ mở cửa, độ tin cậy cao — rồi mới tới gần.
  */
-export const RECOMMENDED_SORT_WEIGHTS = { reviewed: 1, hoursKnown: 0.25, confidence: 0.5, proximity: 0.8 };
+export const RECOMMENDED_SORT_WEIGHTS = { reviewed: 1, hoursKnown: 0.25, confidence: 0.5, proximity: 0.8, maybeClosed: -0.6 };
 
 export const PLACE_SEARCH_DEFAULT_LIMIT = 12;
 export const PLACE_SEARCH_MAX_LIMIT = 40;
 // Đếm tổng số kết quả tối đa tới mức này (hiện "1.000+") — đếm hết 20.000 nơi trong bán kính 20 km là lãng phí.
 export const PLACE_COUNT_CAP = 1000;
+
+// ── Trạng thái hoạt động của địa điểm (Place.status) ──
+export const PLACE_STATUS = {
+  ACTIVE: 'active',
+  MAYBE_CLOSED: 'maybe_closed', // có người báo đóng cửa, chưa đủ xác nhận => vẫn hiện, kèm cảnh báo
+  CLOSED: 'closed', // ẩn khỏi tìm kiếm + gợi ý lộ trình (bài viết cũ vẫn xem được)
+};
+export const PLACE_STATUS_VALUES = Object.values(PLACE_STATUS);
+// Ai đánh dấu đóng cửa: nguồn dữ liệu (biến mất khỏi Overture/OSM) hay cộng đồng báo. Nhập lại chỉ mở lại loại 'source'.
+export const CLOSED_BY = { SOURCE: 'source', COMMUNITY: 'community' };
+
+// Báo đóng cửa: (số người báo "đã đóng" − số người báo "vẫn mở") trong 180 ngày gần nhất
+export const PLACE_REPORT_TYPES = { CLOSED: 'closed', OPEN: 'open' };
+export const PLACE_REPORT_THRESHOLDS = { maybeClosed: 1, closed: 3 };
+export const PLACE_REPORT_TTL_DAYS = 180;
 
 // Ứng viên cho bộ lên lộ trình: mỗi loại hình lấy N nơi chất lượng nhất + M nơi gần nhất trong bán kính.
 export const PLANNER_CANDIDATES_PER_CATEGORY = { best: 40, nearest: 15 };

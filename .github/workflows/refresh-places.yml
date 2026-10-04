@@ -1,0 +1,62 @@
+# Làm mới dữ liệu địa điểm từ Overture Maps + OpenStreetMap mỗi tháng (Overture ra bản mới khoảng giữa tháng).
+# - Thêm quán mới, cập nhật tên / địa chỉ / giờ mở cửa.
+# - Quán biến mất khỏi nguồn (thường là đã đóng cửa): xoá, hoặc chuyển "đã đóng cửa" nếu đang được ghim / đăng bài.
+# Cần: Settings → Secrets and variables → Actions → thêm secret MONGO_URI.
+#      MongoDB Atlas → Network Access phải cho phép IP của GitHub (0.0.0.0/0) vì máy chạy GitHub đổi IP mỗi lần.
+# Chạy tay: tab Actions → "Refresh places" → Run workflow (chọn dry_run để chỉ xem thống kê).
+name: Refresh places
+
+on:
+  schedule:
+    - cron: '0 20 25 * *' # 03:00 sáng ngày 26 hằng tháng (giờ Việt Nam)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Chỉ thống kê, không ghi database'
+        type: boolean
+        default: false
+
+concurrency:
+  group: refresh-places
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cài đặt
+        run: |
+          npm ci
+          pip install overturemaps
+
+      - name: Tải Overture Maps
+        run: npm run places:fetch-overture
+
+      - name: Tải OpenStreetMap
+        run: npm run places:fetch-osm
+
+      - name: Nhập vào database
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+        run: node src/scripts/importOpenPlaces.js ${{ inputs.dry_run && '--dry-run' || '--prune' }}
+
+      - name: Lưu báo cáo nhập
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: import-report
+          path: data/open/import-report.json
+          if-no-files-found: ignore
+          retention-days: 90

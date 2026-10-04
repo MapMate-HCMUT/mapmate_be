@@ -100,7 +100,8 @@ npm run seed:social   # (tuỳ chọn) bạn bè, ghim, lộ trình, bài viết
 |---|---|---|---|---|
 | GET | `/api/places/filter-options` | — | — | Mọi lựa chọn của bộ lọc: `categories`, `tags`, `vehicles`, `sorts`, `price`, `districts`... |
 | GET | `/api/places/nearby` | Tuỳ chọn | `lat, lng, radius_km, categories, tags, price_min, price_max, min_rating, district, q, open_at, vehicle, sort (mặc định recommended), page, limit` | `{ items, total, total_capped, has_more }` (kèm `distance_km`, `travel_minutes`, `my_pin`, `source`, `hours_known`, `price_estimated`). Đếm tối đa 1.000 (`total_capped = true` => hiện "1.000+") |
-| GET | `/api/places/:id` | Tuỳ chọn | — | Chi tiết 1 địa điểm |
+| GET | `/api/places/:id` | Tuỳ chọn | — | Chi tiết 1 địa điểm (kèm `status`, `report_counts`, `my_report`, `data_updated_at`) |
+| POST | `/api/places/:id/reports` | Bearer | `{ type: 'closed' \| 'open' }` | `{ status, report_counts, my_report }` — báo nơi này đã đóng cửa / vẫn mở |
 | POST | `/api/itineraries/suggest` | Tuỳ chọn | `{ criteria, place_ids? }` | `{ criteria, candidate_count, options[≤3] }` — mỗi option có `stops[]` + `summary` |
 | POST | `/api/itineraries/preview` | — | `{ criteria, place_ids }` | `{ stops, summary }` cho đúng các điểm đang chọn |
 | POST | `/api/itineraries` | Bearer | `{ name, place_ids, vehicle, people, start_time, origin, criteria, tags, visibility }` | Lộ trình đã lưu |
@@ -126,7 +127,7 @@ pip install overturemaps            # 1 lần (Python ≥ 3.10) — công cụ t
 npm run places:fetch-overture       # -> data/open/overture_hcmc.geojsonseq (~450 MB, ~30 giây)
 npm run places:fetch-osm            # -> data/open/osm_hcmc.json (~2 MB, qua Overpass API)
 npm run places:import -- --dry-run  # chỉ thống kê, KHÔNG ghi DB
-npm run places:import               # ghi vào `places` (~2 phút). Thêm --prune để xoá bản ghi cũ không còn trong nguồn
+npm run places:import               # ghi vào `places` (~2 phút). Thêm --prune khi làm mới định kỳ (xem bên dưới)
 ```
 
 - Chạy `seed:places` **trước** để 44 địa điểm nhóm tự nhập được giữ nguyên (dữ liệu mở trùng tên sẽ bị bỏ qua).
@@ -134,6 +135,18 @@ npm run places:import               # ghi vào `places` (~2 phút). Thêm --prun
 - Kết quả chi tiết của mỗi lần nhập: `data/open/import-report.json`. Thư mục `data/open/` không đưa lên git.
 - Trường mới của `Place`: `source` (`mapmate` / `overture` / `osm` / `community`), `source_ref`, `osm_ref`, `confidence`, `price_estimated`, `hours_known`, `cuisines`, `contact { phone, website, facebook }`.
 - Dữ liệu mở **không có đánh giá** (`rating = 0`, hiện "Chưa có đánh giá"), **giá là ước tính theo loại hình** (`price_estimated = true`), phần lớn **chưa rõ giờ** (`hours_known = false` — khác với `opening_hours = null` của dữ liệu nhóm nghĩa là mở cả ngày).
+- Loại hình **Công viên** (`park`): công viên cây xanh, khu vui chơi (Suối Tiên, Đầm Sen), công viên nước, sở thú.
+
+### Giữ dữ liệu luôn mới (quán đóng cửa)
+
+| Cơ chế | Khi nào | Kết quả |
+|---|---|---|
+| **Làm mới hằng tháng** — [.github/workflows/refresh-places.yml](.github/workflows/refresh-places.yml) | 03:00 ngày 26 hằng tháng (sau khi Overture ra bản mới) hoặc bấm *Run workflow* | Thêm nơi mới, cập nhật thông tin. Nơi biến mất khỏi nguồn: **xoá**; nếu đang được ghim / đăng bài / có trong lộ trình thì chuyển `status = closed` (ẩn). Xuất hiện lại => tự mở lại |
+| **Cộng đồng báo** — `POST /api/places/:id/reports` | Bất cứ lúc nào | Điểm = số người báo "đã đóng" − số người báo "vẫn mở" (phiếu trong 180 ngày): ≥ 1 => `maybe_closed` (cảnh báo, planner tránh), ≥ 3 => `closed` (ẩn) + người báo đúng được +20 XP |
+
+- `Place.status`: `active` · `maybe_closed` · `closed`; `closed_by`: `source` (nguồn gỡ — lần nhập sau có thể mở lại) hoặc `community` (cộng đồng báo — nhập lại **không** mở lại). Nơi `closed` không hiện trong tìm kiếm / gợi ý lộ trình nhưng bài viết cũ vẫn xem được.
+- Bật workflow: repo GitHub → Settings → Secrets and variables → Actions → thêm `MONGO_URI`; MongoDB Atlas → Network Access phải cho phép `0.0.0.0/0` (máy GitHub đổi IP mỗi lần chạy).
+- Báo cáo mỗi lần chạy: tab Actions → lần chạy → Artifacts → `import-report`.
 - Code: [src/scripts/importOpenPlaces.js](src/scripts/importOpenPlaces.js) + [src/scripts/openData/](src/scripts/openData) (ánh xạ loại hình + giá ước tính ở `placeKinds.js`, gộp trùng ở `placeMerger.js`, chuẩn hoá quận ở `districts.js`).
 
 ## Kết nối: Bạn bè, Bảng tin, Ghim

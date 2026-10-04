@@ -5,6 +5,7 @@ import {
   MIN_RATING_PRESETS,
   PEOPLE_FILTER,
   PLACE_COUNT_CAP,
+  PLACE_STATUS,
   PLACE_SORTS,
   PLACE_TAGS,
   PLANNER_CANDIDATES_PER_CATEGORY,
@@ -31,6 +32,7 @@ import { AppError } from '../utils/AppError.js';
 import { roundTo } from '../utils/geo.js';
 import { planLeg, resolveModes } from '../utils/transport.js';
 import { createMemoryCache } from '../utils/memoryCache.js';
+import { getMyReportMap } from './placeReport.service.js';
 import { escapeRegExp, normalizeSearchText } from '../utils/text.js';
 
 const METERS_PER_KM = 1000;
@@ -53,6 +55,7 @@ const buildRecommendedRank = (radiusKm) => {
       { $cond: [{ $eq: ['$hours_known', false] }, 0, weights.hoursKnown] },
       { $multiply: [{ $ifNull: ['$confidence', 1] }, weights.confidence] },
       { $multiply: [{ $max: [0, { $subtract: [1, { $divide: ['$distance_m', radiusKm * METERS_PER_KM] }] }] }, weights.proximity] },
+      { $cond: [{ $eq: ['$status', PLACE_STATUS.MAYBE_CLOSED] }, weights.maybeClosed, 0] },
     ],
   };
 };
@@ -108,7 +111,8 @@ export const getFilterOptions = async () => ({
 
 // Điều kiện lọc thường (đi theo index) — dùng cho $geoNear.query
 const buildFilterQuery = ({ categories, tags, price_min: priceMin, price_max: priceMax, min_rating: minRating, district, q }) => {
-  const query = { category: { $in: categories?.length ? categories : EXPLORE_CATEGORY_VALUES } };
+  // Nơi đã đóng cửa (cộng đồng xác nhận / biến mất khỏi nguồn) không bao giờ hiện trong tìm kiếm + gợi ý lộ trình.
+  const query = { category: { $in: categories?.length ? categories : EXPLORE_CATEGORY_VALUES }, status: { $ne: PLACE_STATUS.CLOSED } };
   if (tags?.length) query.tags = { $in: tags };
   if (priceMax !== undefined) query['price_range.min'] = { $lte: priceMax };
   if (priceMin) query['price_range.max'] = { $gte: priceMin };
@@ -134,8 +138,12 @@ const buildOpenAtMatch = (time) => ({
   },
 });
 
+// Gõ tên cụ thể ("Suối Tiên", "Đầm Sen") => tìm khắp thành phố, không bị thanh bán kính (mặc định 5 km) chặn mất.
+const searchRadiusKm = (filters) => (filters.q ? RADIUS_FILTER.max : filters.radius_km ?? RADIUS_FILTER.default);
+
 const buildNearbyPipeline = (filters) => {
-  const { lat = DEFAULT_ORIGIN.lat, lng = DEFAULT_ORIGIN.lng, radius_km: radiusKm = RADIUS_FILTER.default, open_at: openAt } = filters;
+  const { lat = DEFAULT_ORIGIN.lat, lng = DEFAULT_ORIGIN.lng, open_at: openAt } = filters;
+  const radiusKm = searchRadiusKm(filters);
   return [
     {
       $geoNear: {
@@ -150,7 +158,7 @@ const buildNearbyPipeline = (filters) => {
   ];
 };
 
-export const toPlaceView = (place, { pin } = {}) => {
+export const toPlaceView = (place, { pin, report } = {}) => {
   const [lng, lat] = place.location.coordinates;
   const view = {
     id: place._id,
@@ -173,9 +181,13 @@ export const toPlaceView = (place, { pin } = {}) => {
     cuisines: place.cuisines ?? [],
     contact: place.contact ?? null,
     image_url: place.image_url ?? null,
+    status: place.status ?? PLACE_STATUS.ACTIVE,
+    report_counts: place.report_counts ?? { closed: 0, open: 0 },
+    data_updated_at: place.cached_at ?? null, // lần cuối lấy từ nguồn (Overture / OSM làm mới hằng tháng)
   };
   if (place.distance_m !== undefined) view.distance_km = roundTo(place.distance_m / METERS_PER_KM, 2);
   if (pin !== undefined) view.my_pin = pin;
+  if (report !== undefined) view.my_report = report;
   return view;
 };
 
@@ -185,6 +197,10 @@ const getPinMap = async (userId, placeIds) => {
   return new Map(pins.map((pin) => [String(pin.place_id), pin.status]));
 };
 
+// Ghim + phiếu báo đóng cửa của người đang xem (khách chưa đăng nhập => không có 2 trường này).
+const viewerState = (userId, place, pinMap, reportMap) =>
+  userId ? { pin: pinMap.get(String(place._id)) ?? null, report: reportMap.get(String(place._id)) ?? null } : {};
+
 // GET /api/places/nearby — tìm địa điểm theo bộ lọc, có phân trang và tổng số kết quả.
 export const searchPlaces = async (filters, userId) => {
   const { sort, page, limit, vehicle, transport_modes: customModes, lat = DEFAULT_ORIGIN.lat, lng = DEFAULT_ORIGIN.lng } = filters;
@@ -193,7 +209,7 @@ export const searchPlaces = async (filters, userId) => {
     ...buildNearbyPipeline(filters),
     {
       $facet: {
-        items: [...sortStages(sort, filters.radius_km ?? RADIUS_FILTER.default), { $skip: (page - 1) * limit }, { $limit: limit }],
+        items: [...sortStages(sort, searchRadiusKm(filters)), { $skip: (page - 1) * limit }, { $limit: limit }],
         total: [{ $limit: PLACE_COUNT_CAP + 1 }, { $count: 'count' }],
       },
     },
@@ -201,17 +217,18 @@ export const searchPlaces = async (filters, userId) => {
 
   const counted = result.total[0]?.count ?? 0;
   const total = Math.min(counted, PLACE_COUNT_CAP);
-  const pinMap = await getPinMap(userId, result.items.map((place) => place._id));
+  const placeIds = result.items.map((place) => place._id);
+  const [pinMap, reportMap] = await Promise.all([getPinMap(userId, placeIds), getMyReportMap(userId, placeIds)]);
   const items = result.items.map((place) => {
     const leg = planLeg([lng, lat], place.location.coordinates, { modes });
     return {
-      ...toPlaceView(place, { pin: userId ? pinMap.get(String(place._id)) ?? null : undefined }),
+      ...toPlaceView(place, viewerState(userId, place, pinMap, reportMap)),
       travel_minutes: leg.minutes,
       travel: { mode: leg.mode, emoji: leg.emoji, label: leg.label, cost_per_person: leg.costPerPerson }, // cách đi nhanh/rẻ nhất tới đây
     };
   });
 
-  return { items, page, limit, total, total_capped: counted > PLACE_COUNT_CAP, has_more: page * limit < counted };
+  return { items, page, limit, total, total_capped: counted > PLACE_COUNT_CAP, has_more: page * limit < counted, radius_km: searchRadiusKm(filters) };
 };
 
 // Thứ tự chất lượng cho ứng viên lộ trình: đã kiểm chứng (có đánh giá) -> biết giờ mở cửa -> độ tin cậy.
@@ -238,8 +255,8 @@ export const findCandidatePlaces = async (filters) => {
 export const getPlaceById = async (placeId, userId) => {
   const place = await Place.findById(placeId).lean();
   if (!place) throw new AppError('Không tìm thấy địa điểm', HTTP_STATUS.NOT_FOUND, EXPLORE_ERROR_CODES.PLACE_NOT_FOUND);
-  const pinMap = await getPinMap(userId, [place._id]);
-  return toPlaceView(place, { pin: userId ? pinMap.get(String(place._id)) ?? null : undefined });
+  const [pinMap, reportMap] = await Promise.all([getPinMap(userId, [place._id]), getMyReportMap(userId, [place._id])]);
+  return toPlaceView(place, viewerState(userId, place, pinMap, reportMap));
 };
 
 export const getPlacesByIds = async (placeIds) => {

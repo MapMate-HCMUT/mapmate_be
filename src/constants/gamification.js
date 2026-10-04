@@ -9,6 +9,7 @@ export const XP_ACTIONS = {
   TRIP_COMPLETED: 'trip_completed',
   DAILY_STREAK: 'daily_streak',
   BADGE_UNLOCKED: 'badge_unlocked',
+  PLACE_CLOSURE_CONFIRMED: 'place_closure_confirmed', // báo quán đóng cửa và được cộng đồng xác nhận
 };
 
 export const XP_REWARDS = {
@@ -18,6 +19,7 @@ export const XP_REWARDS = {
   [XP_ACTIONS.REPORT_VERIFIED]: { xp: 10, stars: 2 },
   [XP_ACTIONS.TRIP_COMPLETED]: { xp: 100, stars: 20 },
   [XP_ACTIONS.DAILY_STREAK]: { xp: 5, stars: 1 },
+  [XP_ACTIONS.PLACE_CLOSURE_CONFIRMED]: { xp: 20, stars: 4 },
 };
 
 // Bộ đếm hoạt động lưu sẵn trong users.stats — đọc O(1), không cần đếm lại sổ XP.

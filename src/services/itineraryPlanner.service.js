@@ -1,4 +1,4 @@
-import { DEFAULT_VISIT_MINUTES, EXPLORE_CATEGORIES } from '../constants/places.js';
+import { DEFAULT_VISIT_MINUTES, EXPLORE_CATEGORIES, PLACE_STATUS } from '../constants/places.js';
 import { EXPLORE_ERROR_CODES } from '../constants/errorCodes.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { ITINERARY_MAX_STOPS } from '../constants/social.js';
@@ -24,6 +24,8 @@ const STYLE_WEIGHT = 0.6;
 const UNRATED_RATING_SCORE = 0.3;
 // Chưa rõ giờ mở cửa => có rủi ro tới nơi thấy đóng cửa: trừ nhẹ điểm để ưu tiên nơi biết giờ.
 const UNKNOWN_HOURS_PENALTY = 0.15;
+// Có người báo đã đóng cửa (chưa đủ xác nhận) => gần như không chọn, trừ khi người dùng tự thêm.
+const MAYBE_CLOSED_PENALTY = 0.8;
 
 const isUnrated = (place) => !(place.review_count > 0) && !(place.rating > 0);
 
@@ -77,7 +79,7 @@ const buildScorer = (candidates, { tags, radiusKm }) => {
 
   return (place, weights) => {
     const feature = features(place);
-    const penalty = place.hours_known === false ? UNKNOWN_HOURS_PENALTY : 0;
+    const penalty = (place.hours_known === false ? UNKNOWN_HOURS_PENALTY : 0) + (place.status === PLACE_STATUS.MAYBE_CLOSED ? MAYBE_CLOSED_PENALTY : 0);
     return Object.entries(weights).reduce((sum, [key, weight]) => sum + feature[key] * weight, feature.style * STYLE_WEIGHT - penalty);
   };
 };
@@ -220,6 +222,7 @@ export const buildPlan = (orderedPlaces, { origin, modes, startTime, people, tri
     avg_rating: rated.length ? roundTo(rated.reduce((total, place) => total + place.rating, 0) / rated.length) : null,
     all_open: stops.every((stop) => stop.open_on_arrival), // false => có điểm đóng cửa lúc bạn tới
     unknown_hours_stops: orderedPlaces.filter((place) => place.hours_known === false).length, // nên kiểm tra giờ trước khi đi
+    maybe_closed_stops: orderedPlaces.filter((place) => place.status && place.status !== PLACE_STATUS.ACTIVE).length, // có người báo đóng cửa
     estimated_price_stops: orderedPlaces.filter((place) => place.price_estimated).length, // giá là ước tính theo loại hình
     transport: summarizeTransport(stops),
   };

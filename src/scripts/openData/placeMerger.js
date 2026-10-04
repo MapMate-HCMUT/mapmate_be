@@ -7,8 +7,12 @@ import { SpatialGrid } from './spatialGrid.js';
 
 const METERS_PER_KM = 1000;
 const SAME_NAME_RATIO = 0.8;
-const LANDMARK_SAME_SPOT_M = 60;
-const LANDMARK_CATEGORIES = new Set(['attraction', 'shopping']);
+// Tượng đài / TTTM cùng loại sát nhau ≤ 60 m là 1 nơi (dù khác tên). Công viên, khu vui chơi rộng hơn nhiều => ≤ 200 m
+// nhưng phải chung ≥ 50% từ khoá ("Dam Sen Water Park" = "Công viên Nước Đầm Sen"), để không nuốt công viên nhỏ bên cạnh.
+const SAME_SPOT_RULES = { attraction: { meters: 60, minRatio: 0 }, shopping: { meters: 60, minRatio: 0 }, park: { meters: 200, minRatio: 0.5 } };
+const SEARCH_RADIUS_M = Math.max(SAME_NAME_RADIUS_M, ...Object.values(SAME_SPOT_RULES).map((rule) => rule.meters)); // ô lưới phủ bán kính lớn nhất
+// Tên chính của khu vui chơi (ưu tiên giữ khi gộp với trò chơi / khu con bên trong: "Roller Coaster (Suoi Tien Park)")
+const MAIN_PARK_NAME = /^(khu du lịch|công viên|thảo cầm viên|khu vui chơi|vườn)/i;
 // Từ chung chung không giúp phân biệt quán: "Quán", "Cà phê", "Nhà hàng"...
 // "Chợ An Đông" = "An Dong Market", "Phố đi bộ Bùi Viện" = "Bui Vien Walking Street".
 const GENERIC_WORDS = new Set([
@@ -29,17 +33,19 @@ const isIdenticalName = (a, b) => a.size === b.size && sharedRatio(a, b) === 1;
  * 2 bản ghi là 1 địa điểm khi:
  * - tên giống hệt (sau chuẩn hoá) và cách ≤ 150 m (2 nguồn hay lệch toạ độ), hoặc
  * - tên gần giống (≥ 80% từ khoá) + CÙNG loại hình + cách ≤ 80 m ("Kem Hồ Thị Kỷ" ≠ "Chợ đêm Hồ Thị Kỷ"), hoặc
- * - tượng đài / công viên / TTTM cùng loại, sát nhau ≤ 60 m (hay có nhiều tên Việt / Anh / tên cũ).
+ * - tượng đài / TTTM cùng loại sát nhau ≤ 60 m; công viên / khu vui chơi ≤ 200 m + chung ≥ 50% từ khoá (nhiều tên Việt / Anh).
  */
 const isSamePlace = (record, other, meters) => {
   if (isIdenticalName(record.tokens, other.tokens)) return meters <= SAME_NAME_RADIUS_M;
-  if (meters > DUPLICATE_RADIUS_M || record.category !== other.category) return false;
-  if (sharedRatio(record.tokens, other.tokens) >= SAME_NAME_RATIO) return true;
-  return meters <= LANDMARK_SAME_SPOT_M && LANDMARK_CATEGORIES.has(record.category);
+  if (record.category !== other.category) return false;
+  if (meters <= DUPLICATE_RADIUS_M && sharedRatio(record.tokens, other.tokens) >= SAME_NAME_RATIO) return true;
+  const rule = SAME_SPOT_RULES[record.category]; // quán ăn / cà phê: không có luật này (nhiều quán chung 1 toạ độ trong TTTM)
+  return Boolean(rule) && meters <= rule.meters && sharedRatio(record.tokens, other.tokens) >= rule.minRatio;
 };
 
 // Bổ sung trường còn thiếu của bản gốc từ bản trùng (không ghi đè dữ liệu bản gốc đã có).
 const mergeInto = (base, extra) => {
+  if (base.category === 'park' && MAIN_PARK_NAME.test(extra.name) && !MAIN_PARK_NAME.test(base.name)) base.name = extra.name;
   if (extra.source_ref?.startsWith('osm:') && !base.osm_ref) base.osm_ref = extra.source_ref;
   base.hours ??= extra.hours;
   base.address ||= extra.address;
@@ -56,7 +62,7 @@ const mergeInto = (base, extra) => {
 
 export class PlaceMerger {
   constructor() {
-    this.grid = new SpatialGrid(SAME_NAME_RADIUS_M);
+    this.grid = new SpatialGrid(SEARCH_RADIUS_M);
     this.curatedGrid = new SpatialGrid(CURATED_SAME_NAME_RADIUS_M); // địa điểm MapMate: tìm trong phạm vi rộng hơn
     this.places = [];
     this.stats = { added: 0, mergedIntoOpenData: 0, matchedCurated: 0 };

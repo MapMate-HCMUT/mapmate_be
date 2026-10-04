@@ -1,7 +1,8 @@
 // Nhập địa điểm từ dữ liệu mở (Overture Maps + OpenStreetMap) vào collection `places`.
 // Cần tải dữ liệu trước:  npm run places:fetch-overture  &&  npm run places:fetch-osm
 // Chạy:                   npm run places:import -- [--dry-run] [--prune] [--min-confidence=0.75]
-//   --prune: xoá địa điểm nguồn mở không còn trong lần nhập này (trừ nơi đang được ghim / đăng bài / có trong lộ trình)
+//   --prune: nơi không còn trong nguồn => xoá; nếu đang được ghim / đăng bài / có trong lộ trình thì chuyển "đã đóng cửa" (ẩn)
+// Tự động hằng tháng: .github/workflows/refresh-places.yml
 // Nhập lại nhiều lần được: cập nhật theo source_ref, không tạo trùng, không ghi đè rating / giá do cộng đồng sửa.
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -12,7 +13,7 @@ import Place from '../models/Place.model.js';
 import { createDistrictInferer } from './openData/districts.js';
 import { toPlaceDocument } from './openData/placeDocument.js';
 import { PlaceMerger } from './openData/placeMerger.js';
-import { pruneStalePlaces } from './openData/prunePlaces.js';
+import { pruneStalePlaces, reopenReturnedPlaces } from './openData/prunePlaces.js';
 import { readOsm, readOverture } from './openData/readers.js';
 
 const REPORT_FILE = 'data/open/import-report.json';
@@ -76,7 +77,9 @@ if (!dryRun) {
   }
   process.stdout.write('\n');
 }
-const pruned = !dryRun && prune ? await pruneStalePlaces(sources.map((doc) => doc.source_ref)) : null;
+const keptRefs = sources.map((doc) => doc.source_ref);
+const reopened = dryRun ? 0 : await reopenReturnedPlaces(keptRefs);
+const pruned = !dryRun && prune ? await pruneStalePlaces(keptRefs) : null;
 
 const report = {
   finished_at: new Date().toISOString(),
@@ -97,7 +100,7 @@ const report = {
     with_cuisine: sources.filter((doc) => doc.cuisines.length).length,
     by_district: countBy(sources, (doc) => doc.district || '(chưa rõ)'),
   },
-  write: dryRun ? null : { upserted, modified, pruned },
+  write: dryRun ? null : { upserted, modified, reopened, pruned },
 };
 await mkdir('data/open', { recursive: true });
 await writeFile(REPORT_FILE, JSON.stringify(report, null, 2));
@@ -106,5 +109,5 @@ console.log(`${dryRun ? '🔍 [DRY RUN — không ghi DB]' : '✅'} ${documents.
 console.log('   Theo loại:', report.output.by_category);
 console.log('   Theo nguồn:', report.output.by_source, '· gộp Overture+OSM:', report.output.merged_overture_osm);
 console.log(`   Có giờ mở cửa: ${report.output.with_opening_hours} · có quận: ${report.output.with_district} (đoán ${inferredDistricts}) · trùng dữ liệu nhóm: ${merger.stats.matchedCurated}`);
-if (!dryRun) console.log(`   Thêm mới ${upserted}, cập nhật ${modified}${pruned ? ` · xoá ${pruned.deleted} bản ghi cũ (giữ ${pruned.kept_in_use} đang được dùng)` : ''}`);
+if (!dryRun) console.log(`   Thêm mới ${upserted}, cập nhật ${modified}${pruned ? ` · xoá ${pruned.deleted} nơi không còn trong nguồn, đánh dấu đóng cửa ${pruned.closed_in_use} nơi đang được dùng` : ''} · mở lại ${reopened}`);
 await mongoose.disconnect();

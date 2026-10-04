@@ -12,3 +12,4 @@ export { Friendship } from './friendship.model.js';
 export { Post } from './post.model.js';
 export { PostLike } from './postLike.model.js';
 export { PlacePin } from './placePin.model.js';
+export { PlaceReport } from './placeReport.model.js';
