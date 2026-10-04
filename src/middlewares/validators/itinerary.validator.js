@@ -89,9 +89,18 @@ export const createItinerarySchema = z.object({
 });
 
 // PATCH /api/itineraries/:id
-export const updateItinerarySchema = z.strictObject({
+export const updateItinerarySchema = z.object({
   name: z.string().trim().min(1).max(ITINERARY_NAME_MAX_LENGTH).optional(),
+  place_ids: objectIdList(ITINERARY_MAX_STOPS, 1).optional(),
+  vehicle: vehicleSchema.optional(),
+  transport_modes: transportModes.optional(),
+  people: peopleSchema.optional(),
+  start_time: timeOfDay.optional(),
+  origin: originSchema.optional(),
+  criteria: tripCriteriaSchema.nullable().optional(),
+  stay_overrides: stayOverrides.optional(),
   visibility: z.enum(Object.values(ITINERARY_VISIBILITY)).optional(),
   tags: hashtagList.optional(),
   status: z.enum(['active', 'completed', 'cancelled']).optional(),
 }).refine((changes) => Object.keys(changes).length > 0, 'Không có thông tin nào để cập nhật');
+

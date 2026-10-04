@@ -1,3 +1,4 @@
+import { DEFAULT_ORIGIN } from '../constants/places.js';
 import { EXPLORE_ERROR_CODES } from '../constants/errorCodes.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { ITINERARY_LIST_LIMIT, ITINERARY_VISIBILITY } from '../constants/social.js';
@@ -107,8 +108,51 @@ export const getItinerary = async (itineraryId, viewerId) => {
   return toItineraryView(itinerary, viewerId);
 };
 
-export const updateItinerary = async (userId, itineraryId, changes) => {
-  const itinerary = await Itinerary.findOneAndUpdate({ _id: itineraryId, user_id: userId }, { $set: changes }, { returnDocument: 'after', runValidators: true }).lean();
+export const updateItinerary = async (userId, itineraryId, input) => {
+  const existing = await Itinerary.findOne({ _id: itineraryId, user_id: userId });
+  if (!existing) throw notFound();
+
+  const changes = { ...input };
+
+  if (input.place_ids?.length) {
+    const placeIds = input.place_ids;
+    const places = await getPlacesByIds(placeIds);
+    const vehicle = input.vehicle ?? existing.vehicle;
+    const transportModes = input.transport_modes ?? existing.transport_modes ?? [];
+    const people = input.people ?? existing.people ?? 1;
+    const startTime = input.start_time ?? existing.start_time ?? '09:00';
+    const origin = input.origin ?? input.criteria?.origin ?? existing.criteria?.origin ?? DEFAULT_ORIGIN;
+    const criteria = input.criteria !== undefined ? input.criteria : existing.criteria;
+    const stayOverrides = input.stay_overrides ?? {};
+
+    const plan = buildPlan(places, {
+      origin, startTime, people,
+      modes: resolveModes(vehicle, transportModes),
+      tripBudget: criteria?.trip_budget ?? null,
+      durationHours: criteria?.duration_hours ?? null,
+    }, { stayOverrides });
+
+    changes.stops = planToStops(plan);
+    changes.summary = plan.summary;
+    changes.total_cost = plan.summary.total_cost;
+    changes.total_duration = plan.summary.total_minutes;
+    changes.total_distance_km = plan.summary.total_distance_km;
+    if (input.criteria !== undefined) changes.criteria = criteria;
+    if (input.vehicle) changes.vehicle = vehicle;
+    if (input.transport_modes) changes.transport_modes = transportModes;
+    if (input.people) changes.people = people;
+    if (input.start_time) changes.start_time = startTime;
+  }
+  delete changes.place_ids;
+  delete changes.stay_overrides;
+  delete changes.origin;
+
+  const itinerary = await Itinerary.findOneAndUpdate(
+    { _id: itineraryId, user_id: userId },
+    { $set: changes },
+    { returnDocument: 'after', runValidators: true }
+  ).lean();
+
   if (!itinerary) throw notFound();
   return toItineraryView(itinerary, userId);
 };
