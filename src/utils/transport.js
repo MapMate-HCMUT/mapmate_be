@@ -14,6 +14,7 @@ import {
   WALK_MAX_STATION_KM,
 } from '../constants/transport.js';
 import { haversineKm, roundTo } from './geo.js';
+import { findBestTransitMatch } from '../services/transit.service.js';
 
 const MINUTES_PER_HOUR = 60;
 const ROAD_DETOUR_FACTOR = 1.3; // đường đi thực tế dài hơn đường chim bay ~30% trong nội đô
@@ -135,7 +136,24 @@ export const planLeg = (from, to, { modes, people = 1, date = new Date() }) => {
 
   const options = modes
     .filter((mode) => isDirectModeUsable(mode, distanceKm, modes))
-    .map((mode) => toOption([directSegment(mode, distanceKm, context)]));
+    .map((mode) => {
+      if (mode === 'bus') {
+        const transitMatch = findBestTransitMatch(from, to);
+        if (transitMatch && transitMatch.route_type !== 'metro') {
+          const busSeg = directSegment(mode, distanceKm, context);
+          busSeg.label = `Tuyến ${transitMatch.route_number} (${transitMatch.boarding_stop.name} → ${transitMatch.alighting_stop.name})`;
+          busSeg.transit = {
+            route_id: transitMatch.route_id,
+            route_number: transitMatch.route_number,
+            route_name: transitMatch.route_name,
+            boarding: transitMatch.boarding_stop.name,
+            alighting: transitMatch.alighting_stop.name,
+          };
+          return toOption([busSeg], busSeg.label);
+        }
+      }
+      return toOption([directSegment(mode, distanceKm, context)]);
+    });
   if (modes.includes('metro')) {
     const metro = metroOption(from, to, modes, context);
     if (metro) options.push(metro);
