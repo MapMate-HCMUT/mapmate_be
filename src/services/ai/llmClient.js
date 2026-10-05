@@ -5,6 +5,7 @@
 // Không ghi log nội dung prompt / câu trả lời (có thể chứa thông tin người dùng).
 import { AI_LLM_MAX_RETRIES, AI_LLM_RETRY_DELAY_MS, AI_LLM_TIMEOUT_MS } from '../../constants/ai.js';
 import { env } from '../../config/env.js';
+import { GROQ_MODEL_RPM } from '../../constants/rateLimits.js';
 import { toProviderSchema } from './aiSchemas.js';
 
 const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
@@ -27,14 +28,30 @@ const MS_PER_SECOND = 1000;
 const MAX_RETRY_AFTER_MS = 8000; // chờ lâu hơn thì chuyển luôn sang bản dự phòng cho nhanh
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const requestCompletion = async (body) => {
+// Ngân sách gọi Groq của CẢ server theo model (cửa sổ trượt 60 giây). Hết ngân sách => báo lỗi ngay để pipeline
+// dùng bản dự phòng, thay vì dồn thêm request vào Groq rồi nhận 429 (và chậm cho mọi người).
+const MINUTE_MS = 60 * MS_PER_SECOND;
+const recentCalls = new Map(); // model -> [thời điểm gọi]
+export const acquireGroqSlot = (model) => {
+  const now = Date.now();
+  const calls = (recentCalls.get(model) ?? []).filter((time) => now - time < MINUTE_MS);
+  if (calls.length >= (GROQ_MODEL_RPM[model] ?? GROQ_MODEL_RPM.default)) {
+    recentCalls.set(model, calls);
+    throw new LlmError(`Groq đang quá tải (${model}) — tạm dùng chế độ dự phòng`, { status: 429 });
+  }
+  calls.push(now);
+  recentCalls.set(model, calls);
+};
+
+const requestCompletion = async (body, { timeoutMs = AI_LLM_TIMEOUT_MS } = {}) => {
+  acquireGroqSlot(body.model);
   let response;
   try {
     response = await fetch(`${env.llm.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.llm.apiKey}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(AI_LLM_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     throw new LlmError(`Không gọi được Groq: ${error.name === 'TimeoutError' ? 'quá thời gian' : error.message}`, { retryable: true });
@@ -59,6 +76,13 @@ const requestWithRetry = async (body) => {
       await sleep(error.retryAfterMs ?? AI_LLM_RETRY_DELAY_MS * (attempt + 1));
     }
   }
+};
+
+// Gọi 1 lần, không thử lại (bộ kiểm duyệt: lỗi thì bỏ qua lớp đó, không làm chậm cả lượt chat). Trả nội dung text.
+export const callGroqOnce = async (body, { timeoutMs } = {}) => {
+  if (!isLlmConfigured()) throw new LlmError('Chưa cấu hình GROQ_API_KEY');
+  const completion = await requestCompletion(body, { timeoutMs });
+  return completion.choices?.[0]?.message?.content ?? '';
 };
 
 const parseContent = (completion) => {

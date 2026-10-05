@@ -96,16 +96,7 @@ export const detectPlaceQuestion = (text, lower) => {
   return { place_name: placeName, topics };
 };
 
-// ── Không được phép / ngoài phạm vi ──
-const NOT_ALLOWED = [
-  { pattern: /(ma tuý|ma túy|cần sa|thuốc lắc|bay lắc|kẹo ke|cỏ mỹ|heroin|cocaine|chất cấm)/, reason: 'MapMate không hỗ trợ tìm chất cấm.' },
-  { pattern: /(gái gọi|gái bao|mua dâm|mại dâm|bán dâm|kích dục|happy ending|tay vịn)/, reason: 'MapMate không hỗ trợ dịch vụ người lớn / mại dâm.' },
-  { pattern: /(sòng bạc|đánh bạc|cá độ|lô đề|đánh bài ăn tiền|xóc đĩa)/, reason: 'MapMate không hỗ trợ tìm chỗ cờ bạc.' },
-  { pattern: /(mua súng|vũ khí|đánh nhau|trộm|cướp|đua xe|trốn công an)/, reason: 'MapMate không hỗ trợ yêu cầu có thể gây nguy hiểm hoặc phạm pháp.' },
-  { pattern: /(^|[\s,.!?])(đm|đmm|địt|đéo|cặc|lồn|óc chó|thằng ngu|con ngu|ngu như)($|[\s,.!?])/, reason: 'Mình sẵn lòng giúp, nhưng mong bạn nói chuyện lịch sự hơn nhé.' },
-];
-export const detectNotAllowed = (lower) => NOT_ALLOWED.find((rule) => rule.pattern.test(lower))?.reason ?? null;
-
+// ── Ngoài phạm vi (yêu cầu không được phép: services/ai/safety/ruleModeration.js) ──
 const OTHER_CITIES = /(hà nội|đà nẵng|đà lạt|nha trang|vũng tàu|phú quốc|hội an|(?<!bò )huế|sa ?pa|cần thơ|hạ long|quy nhơn|phan thiết|mũi né|bangkok|singapore|seoul|tokyo)/;
 const HCMC_HINTS = /(sài gòn|saigon|tp\.? ?hcm|hồ chí minh|thủ đức|quận|bình thạnh|phú nhuận|gò vấp|tân bình)/;
 export const mentionsOtherCity = (lower) => OTHER_CITIES.test(lower) && !HCMC_HINTS.test(lower);

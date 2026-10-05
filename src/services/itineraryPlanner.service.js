@@ -9,6 +9,7 @@ import { addMinutesToTime, haversineKm, isOpenAt, roundTo } from '../utils/geo.j
 import { clampStayOverride, getStayRange } from '../utils/stayTime.js';
 import { insideVenueLeg, planLeg, resolveModes } from '../utils/transport.js';
 import { sameVenue, venueOf } from '../utils/venue.js';
+import { normalizeSearchText } from '../utils/text.js';
 import { getVisitRole } from '../utils/visitRole.js';
 import { validatePlanStops } from './itineraryValidator.js';
 import { findCandidatePlaces, findPlacesInVenue, getPlacesByIds, toPlaceView } from './place.service.js';
@@ -422,6 +423,17 @@ const isOpenDuringTrip = (place, startTime, durationHours) => {
   );
 };
 
+// Ăn chay: điểm ăn (bữa chính / ăn vặt loại "food") chỉ lấy quán chay; khu vực không có quán chay thì giữ nguyên
+const VEGETARIAN_NAME = /\b(chay|vegan|vegetarian|thuan chay)\b/;
+const applyDiet = (candidates, diet) => {
+  if (diet !== 'chay') return;
+  const isFoodStop = (place) => place.category === 'food';
+  const isVegetarian = (place) => VEGETARIAN_NAME.test(normalizeSearchText(`${place.name} ${(place.cuisines ?? []).join(' ')}`));
+  if (!candidates.some((place) => isFoodStop(place) && isVegetarian(place))) return;
+  const kept = candidates.filter((place) => !isFoodStop(place) || isVegetarian(place));
+  candidates.splice(0, candidates.length, ...kept);
+};
+
 const toPlaceFilters = (criteria) => ({
   lat: criteria.origin.lat,
   lng: criteria.origin.lng,
@@ -457,6 +469,7 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
   const candidates = found
     .filter((place) => !excluded.has(String(place._id)) && isOpenDuringTrip(place, criteria.start_time, criteria.duration_hours))
     .map((place) => ({ ...place, role: getVisitRole(place) }));
+  applyDiet(candidates, criteria.diet);
   if (candidates.length + mustInclude.length === 0) {
     throw new AppError('Không có địa điểm nào khớp bộ lọc. Hãy nới bán kính hoặc bỏ bớt điều kiện.', HTTP_STATUS.UNPROCESSABLE_ENTITY, EXPLORE_ERROR_CODES.NO_MATCHING_PLACES);
   }

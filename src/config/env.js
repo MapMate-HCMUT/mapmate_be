@@ -14,6 +14,7 @@ export const env = {
   port: Number(process.env.PORT) || 3000,
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || JWT_DEFAULT_EXPIRES_IN,
+  trustProxy: Number(process.env.TRUST_PROXY) || 0, // số tầng proxy phía trước (0 = chạy trực tiếp)
   corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()),
   // Groq (AI Planner). Không có key => AI Planner vẫn chạy bằng bộ hiểu câu dựa trên luật (chất lượng thấp hơn).
   llm: {

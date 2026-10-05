@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AI_DEFAULT_TIER, AI_MAX_MUST_VISIT, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
+import { AI_DEFAULT_TIER, AI_MAX_MUST_VISIT, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
 import { PEOPLE_FILTER } from '../../constants/places.js';
 import { objectId, objectIdList } from './common.validator.js';
 import { tripCriteriaSchema } from './itinerary.validator.js';
@@ -39,3 +39,7 @@ export const aiRecommendSchema = z.object({
   people: z.coerce.number().int().min(PEOPLE_FILTER.min).max(PEOPLE_FILTER.max).nullable().optional(),
   model: tier,
 });
+
+// ── Ghi nhớ của AI ──
+export const aiMemoryUpdateSchema = z.object({ enabled: z.boolean('Giá trị bật/tắt không hợp lệ') });
+export const aiMemoryFactParamSchema = z.object({ key: z.enum(AI_MEMORY_FACT_KEYS, 'Mục ghi nhớ không hợp lệ') });
