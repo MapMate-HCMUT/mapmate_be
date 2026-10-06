@@ -65,3 +65,4 @@ export const globalRateLimiter = createLimiter(RATE_LIMITS.GLOBAL, 'Bạn gửi 
 export const placeSearchRateLimiter = createLimiter(RATE_LIMITS.PLACE_SEARCH, 'Bạn tìm kiếm hơi nhanh, đợi vài giây rồi thử lại nhé');
 export const routeComputeRateLimiter = createLimiter(RATE_LIMITS.ROUTE_COMPUTE, 'Bạn tính lộ trình quá nhiều lần, đợi một chút rồi thử lại nhé');
 export const voiceRateLimiter = createLimiter(RATE_LIMITS.VOICE, 'Bạn dùng giọng nói hơi nhiều, nghỉ vài phút rồi thử lại nhé');
+export const transitRateLimiter = createLimiter(RATE_LIMITS.TRANSIT, 'Bạn tra cứu xe buýt hơi nhanh, đợi một chút rồi thử lại nhé');
