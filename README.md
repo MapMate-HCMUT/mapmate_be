@@ -205,6 +205,34 @@ Bị chặn => lý do rõ ràng + câu hỏi thay thế (ưu tiên theo ghi nh�
 - Đã đăng nhập: lưu phiên vào `aisessions` (`criteria`, `must_visit_ids`, `pending` = bộ nhớ để lượt sau hiểu "rẻ hơn", "Quận 1"). Khách: frontend gửi lại `context` mỗi lượt (`pending` được kiểm tra lại đúng schema).
 - `understood.criteria` đúng chuẩn `tripCriteriaSchema` => dùng chung với `/api/itineraries/*` và bộ lọc Khám phá ("Chỉnh trong Khám phá").
 
+## Xe buýt, Metro số 1, buýt đường sông — `/api/transit`
+
+Dữ liệu **công khai** của Trung tâm Quản lý Giao thông công cộng TP.HCM (API mà trang buyttphcm.com.vn dùng): ~180 tuyến (gồm Metro số 1 `MRT1`, buýt đường sông `SWB1`), trạm có toạ độ, lộ trình 2 chiều, giờ xuất bến từng chuyến, dự đoán xe tới trạm theo GPS. Tuyến đưa rước học sinh (`HS-..`) không được gợi ý; buýt đường sông tạm chưa dùng (`ENABLED_TRANSIT_MODES`).
+
+```bash
+npm run transit:import -- --dry-run   # thử: tải + thống kê (lần đầu ~1.600 request, ~15–20 phút; cache data/transit/cache 7 ngày)
+npm run transit:import                # ghi vào MongoDB (transitroutes, transitstops) — nên chạy lại hằng tuần
+```
+
+- **Tìm cách đi** (`services/transit/transitPlanner.js`, mạng lưới nạp vào bộ nhớ, tự nạp lại khi có dữ liệu mới): đi thẳng 1 tuyến hoặc đổi tuyến 1 lần (đi bộ ≤ 300 m sang trạm khác). Ra / rời trạm theo lựa chọn `connector`: `walk` (chỉ đi bộ ≤ `max_walk_m`), `ride` (gọi xe máy công nghệ, trừ đoạn < 300 m), `auto` (gần đi bộ, xa gọi xe ≤ 5 km). Tuyến đã có trạm đi bộ tới được thì không gọi xe tới trạm khác của tuyến đó; gọi xe > 60% quãng đường => bỏ (gọi xe đi thẳng còn hơn).
+- **Gộp tuyến** lên / xuống cùng trạm thành 1 phương án (giống Google: `03 / 36 / 93`, mỗi chặng có `alternatives` — chỉ tuyến có xe tới ≤ 20 phút sau xe chính).
+- **Đường đi bộ** để vẽ: `POST /api/transit/walk-path` (OSRM foot của FOSSGIS trên OpenStreetMap, cache 7 ngày; lỗi => đường thẳng) — Goong không có chế độ đi bộ, mượn đường xe máy bị vòng theo đường một chiều.
+- Luôn so cùng **gọi xe đi thẳng** và **đi bộ** (≤ 2,5 km) => không có tuyến nào phù hợp vẫn có phương án. Xếp hạng theo `priority`: `fastest` · `least_walk` · `cheapest` (thời gian + phạt đổi tuyến 5 phút + đi bộ / chi phí theo trọng số); phương án đầu = gợi ý, kèm nhãn nhanh nhất / ít đi bộ / rẻ nhất.
+- **Giờ chờ** theo giờ xuất bến thật của lịch đang áp dụng đúng thứ trong tuần (cộng thời gian xe chạy tới trạm); hết chuyến => không gợi ý tuyến đó. Không có lịch => nửa giãn cách, trong giờ hoạt động. Giá: xe buýt trợ giá / metro theo `constants/transport.js`, gọi xe là giá tham khảo.
+
+| Method | Endpoint | Body / Query | Trả về |
+|---|---|---|---|
+| GET | `/api/transit/stops` | `bbox` (≤ 0,3°) | trạm trong khung bản đồ |
+| GET | `/api/transit/stops/:stopId` | — | trạm + các tuyến dừng (hướng đi) |
+| GET | `/api/transit/stops/:stopId/arrivals` | — | xe sắp tới theo GPS (cache 20 giây) |
+| GET | `/api/transit/routes` · `/routes/:routeId` | — | danh sách tuyến · chi tiết (các lượt: đường đi, trạm, chuyến đầu / cuối) |
+| GET | `/api/transit/lines` | — | metro (đường + ga) để vẽ sẵn |
+| POST | `/api/transit/walk-path` | `{ from, to }` (≤ 6 km) | đường đi bộ thật |
+| POST | `/api/transit/plan` | `{ from, to, priority?, connector?, max_walk_m?, depart_at? }` | các phương án A → B |
+| POST | `/api/transit/trip-plan` | `{ waypoints: [lng, lat][], stays?: phút[], ...ưu tiên }` | phương án từng chặng của cả chuyến |
+
+Luôn hiển thị nguồn: "Dữ liệu xe buýt & metro: Trung tâm Quản lý Giao thông công cộng TP.HCM — buyttphcm.com.vn".
+
 ## Kết nối: Bạn bè, Bảng tin, Ghim
 
 | Method | Endpoint | Ghi chú |

@@ -8,6 +8,7 @@ import { notificationRouter } from './notification.routes.js';
 import { pinRouter } from './pin.routes.js';
 import { placeRouter } from './place.routes.js';
 import { postRouter } from './post.routes.js';
+import { transitRouter } from './transit.routes.js';
 import { userRouter } from './user.routes.js';
 
 // Tất cả endpoint nằm dưới /api (Milestone 2 — mục 3).
@@ -23,3 +24,4 @@ apiRouter.use('/friends', friendRouter);
 apiRouter.use('/posts', postRouter);
 apiRouter.use('/pins', pinRouter);
 apiRouter.use('/ai', aiRouter);
+apiRouter.use('/transit', transitRouter);

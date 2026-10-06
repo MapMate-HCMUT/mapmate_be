@@ -13,7 +13,8 @@
     "places:fetch-overture": "node src/scripts/fetchOverturePlaces.js",
     "places:fetch-osm": "node src/scripts/fetchOsmPlaces.js",
     "places:import": "node --env-file=.env src/scripts/importOpenPlaces.js",
-    "places:link-venues": "node --env-file=.env src/scripts/linkVenues.js"
+    "places:link-venues": "node --env-file=.env src/scripts/linkVenues.js",
+    "transit:import": "node --env-file=.env src/scripts/importTransit.js"
   },
   "repository": {
     "type": "git",

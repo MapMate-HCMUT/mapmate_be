@@ -45,7 +45,7 @@ export const getMetroFare = (rideKm) => {
   return rideKm <= flatUntilKm ? min : Math.min(max, Math.ceil(rideKm) * perKm);
 };
 
-const getGrabFare = (distanceKm, mode, people) => {
+export const getGrabFare = (distanceKm, mode, people) => {
   const { baseFare, baseKm, perKm, platformFee, seats } = TRANSPORT_MODES[mode];
   const perVehicle = baseFare + Math.max(0, distanceKm - baseKm) * perKm + platformFee;
   return (perVehicle * Math.ceil(people / seats)) / people; // chia đều cho cả nhóm

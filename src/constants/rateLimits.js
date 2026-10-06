@@ -9,6 +9,8 @@ export const RATE_LIMITS = {
   PLACE_SEARCH: { WINDOW_MS: MINUTE_MS, MAX_REQUESTS: 90 },
   // Tính lộ trình (gợi ý / xem trước / chỉnh ±15′) — mỗi lần chạy thuật toán + nhiều truy vấn DB
   ROUTE_COMPUTE: { WINDOW_MS: MINUTE_MS, MAX_REQUESTS: 40 },
+  // Xe buýt / metro: trạm theo khung bản đồ, giờ xe tới trạm (tự làm mới 30 giây), tìm cách đi
+  TRANSIT: { WINDOW_MS: MINUTE_MS, MAX_REQUESTS: 120 },
   // Nhận dạng giọng nói (Groq Whisper, gói miễn phí 20 lượt/phút cho CẢ app)
   VOICE: { WINDOW_MS: 10 * MINUTE_MS, MAX_REQUESTS: 20 },
 };
