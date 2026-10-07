@@ -2,6 +2,7 @@ import {
   DEFAULT_ORIGIN,
   DURATION_FILTER,
   EXPLORE_CATEGORIES,
+  GENZ_CATEGORIES,
   MIN_RATING_PRESETS,
   PEOPLE_FILTER,
   PLACE_COUNT_CAP,
@@ -46,6 +47,7 @@ const SORT_STAGES = {
   rating: { rating: -1, review_count: -1 },
   popular: { review_count: -1, rating: -1, confidence: -1 },
   price_asc: { 'price_range.min': 1, rating: -1 },
+  tiktok_trend: { 'tiktok_metadata.trend_score': -1, review_count: -1 },
 };
 
 // Điểm "Đề xuất" (constants/places.js): đã có đánh giá + biết giờ mở cửa + độ tin cậy + gần.
@@ -58,6 +60,7 @@ const buildRecommendedRank = (radiusKm) => {
       { $multiply: [{ $ifNull: ['$confidence', 1] }, weights.confidence] },
       { $multiply: [{ $max: [0, { $subtract: [1, { $divide: ['$distance_m', radiusKm * METERS_PER_KM] }] }] }, weights.proximity] },
       { $cond: [{ $eq: ['$status', PLACE_STATUS.MAYBE_CLOSED] }, weights.maybeClosed, 0] },
+      { $multiply: [{ $ifNull: ['$tiktok_metadata.trend_score', 0] }, 0.005] },
     ],
   };
 };
@@ -95,6 +98,7 @@ const buildFareInfo = () => {
 // GET /api/places/filter-options — 1 nguồn duy nhất cho mọi lựa chọn của bộ lọc (frontend + AI Planner dùng chung).
 export const getFilterOptions = async () => ({
   categories: EXPLORE_CATEGORIES,
+  genz_categories: GENZ_CATEGORIES,
   tags: PLACE_TAGS,
   vehicles: VEHICLES.filter((vehicle) => !vehicle.hidden).map(({ value, label, emoji, description, modes }) => ({ value, label, emoji, description, modes })),
   custom_modes: CUSTOM_MODE_VALUES.map((value) => ({ value, label: TRANSPORT_MODES[value].label, emoji: TRANSPORT_MODES[value].emoji })),
@@ -112,9 +116,23 @@ export const getFilterOptions = async () => ({
 });
 
 // Điều kiện lọc thường (đi theo index) — dùng cho $geoNear.query
-const buildFilterQuery = ({ categories, tags, price_min: priceMin, price_max: priceMax, min_rating: minRating, district, q }) => {
+const buildFilterQuery = ({
+  categories,
+  genz_categories,
+  student_friendly,
+  tiktok_trending,
+  tags,
+  price_min: priceMin,
+  price_max: priceMax,
+  min_rating: minRating,
+  district,
+  q,
+}) => {
   // Nơi đã đóng cửa (cộng đồng xác nhận / biến mất khỏi nguồn) không bao giờ hiện trong tìm kiếm + gợi ý lộ trình.
   const query = { category: { $in: categories?.length ? categories : EXPLORE_CATEGORY_VALUES }, status: { $ne: PLACE_STATUS.CLOSED } };
+  if (genz_categories?.length) query.genz_category = { $in: genz_categories };
+  if (student_friendly) query['experience.student_friendly'] = true;
+  if (tiktok_trending) query['tiktok_metadata.viral_level'] = { $in: ['viral', 'trending'] };
   if (tags?.length) query.tags = { $in: tags };
   if (priceMax !== undefined) query['price_range.min'] = { $lte: priceMax };
   if (priceMin) query['price_range.max'] = { $gte: priceMin };
@@ -185,6 +203,10 @@ export const toPlaceView = (place, { pin, report } = {}) => {
     venue: place.parent_place_id ? { id: place.parent_place_id, name: place.parent_place_name } : null, // nằm trong mall nào
     contact: place.contact ?? null,
     image_url: place.image_url ?? null,
+    genz_category: place.genz_category ?? null,
+    genz_sub_category: place.genz_sub_category ?? null,
+    tiktok_metadata: place.tiktok_metadata ?? null,
+    experience: place.experience ?? null,
     status: place.status ?? PLACE_STATUS.ACTIVE,
     report_counts: place.report_counts ?? { closed: 0, open: 0 },
     data_updated_at: place.cached_at ?? null, // lần cuối lấy từ nguồn (Overture / OSM làm mới hằng tháng)
