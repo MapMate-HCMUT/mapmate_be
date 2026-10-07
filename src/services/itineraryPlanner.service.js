@@ -1,5 +1,5 @@
-import { DEFAULT_VISIT_MINUTES, PLACE_STATUS } from '../constants/places.js';
-import { MEAL_RULES, STRETCH, VISIT_ROLES } from '../constants/tripRules.js';
+import { PLACE_STATUS } from '../constants/places.js';
+import { DAYTIME_ONLY, LEISURE_SHOP_NAME, MEAL_RULES, NOT_LEISURE_NAME, STRETCH, VISIT_ROLES } from '../constants/tripRules.js';
 import { SAME_VENUE_BONUS, VENUE_TRIP_BONUS, VENUE_WALK_MINUTES } from '../constants/venues.js';
 import { EXPLORE_ERROR_CODES } from '../constants/errorCodes.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
@@ -23,7 +23,7 @@ const MAX_RATING = 5;
 const ROLE_BUDGET_WEIGHT = { meal: 2, snack: 0.6, drink: 0.8, activity: 1 };
 const BUDGET_SHARE_FACTOR = 1.4;
 // Chọn điểm kế tiếp gần điểm trước (không chỉ gần điểm xuất phát) => lộ trình liền mạch, ít chạy vòng
-const LEG_DISTANCE_WEIGHT = 0.35;
+const LEG_DISTANCE_WEIGHT = 0.6;
 const LEG_LOOKAHEAD = 25; // xét 25 ứng viên tốt nhất của vai trò đó
 // Vai trò -> loại hình được phép lấp vào (giao với loại hình người dùng chọn, nếu có)
 const ROLE_CATEGORIES = {
@@ -45,6 +45,17 @@ const UNRATED_RATING_SCORE = 0.3;
 const UNKNOWN_HOURS_PENALTY = 0.15;
 // Có người báo đã đóng cửa (chưa đủ xác nhận) => gần như không chọn, trừ khi người dùng tự thêm.
 const MAYBE_CLOSED_PENALTY = 0.8;
+// Người dùng nói 1 quận ("food tour Quận 4") => vòng tìm quanh tâm quận vẫn chạm quận bên cạnh: ưu tiên điểm trong đúng quận
+const PREFER_DISTRICT_BONUS = 0.3;
+
+// Giờ dùng để XẾP lộ trình: chùa, nhà thờ, bảo tàng... chưa rõ giờ => coi như chỉ mở ban ngày
+const isDaytimeOnly = (place) => DAYTIME_ONLY.KINDS.includes(place.kind) || (place.category === 'attraction' && DAYTIME_ONLY.NAME.test(place.name ?? ''));
+const planHours = (place) => ((place.opening_hours?.open && place.opening_hours?.close) || !isDaytimeOnly(place) ? place.opening_hours : DAYTIME_ONLY.HOURS);
+const isOpenForPlan = (place, time) => isOpenAt(planHours(place), time);
+
+// Điểm hệ thống được TỰ chọn cho 1 chuyến đi chơi: bỏ sân tập, coworking, cửa hàng chưa rõ loại (điện máy, ô tô...).
+// Người dùng gọi tên thì vẫn đi (điểm bắt buộc không qua bộ lọc này).
+const isCasualPick = (place) => !NOT_LEISURE_NAME.test(place.name ?? '') && (place.category !== 'shopping' || Boolean(place.kind) || LEISURE_SHOP_NAME.test(place.name ?? ''));
 
 const isUnrated = (place) => !(place.review_count > 0) && !(place.rating > 0);
 
@@ -78,7 +89,7 @@ const STRATEGIES = [
 ];
 
 // Chuẩn hoá từng tiêu chí về 0–1 (1 = tốt nhất) theo chính tập ứng viên, để cộng trọng số có ý nghĩa.
-const buildScorer = (candidates, { tags, radiusKm }) => {
+const buildScorer = (candidates, { tags, radiusKm, preferDistrict = null }) => {
   const maxPrice = Math.max(1, ...candidates.map(avgPrice));
   const maxReviewLog = Math.max(1, ...candidates.map((place) => Math.log10(1 + (place.review_count ?? 0))));
   const tagSet = new Set(tags);
@@ -94,7 +105,8 @@ const buildScorer = (candidates, { tags, radiusKm }) => {
   return (place, weights) => {
     const feature = features(place);
     const penalty = (place.hours_known === false ? UNKNOWN_HOURS_PENALTY : 0) + (place.status === PLACE_STATUS.MAYBE_CLOSED ? MAYBE_CLOSED_PENALTY : 0);
-    return Object.entries(weights).reduce((sum, [key, weight]) => sum + feature[key] * weight, feature.style * STYLE_WEIGHT - penalty);
+    const districtBonus = preferDistrict && place.district === preferDistrict ? PREFER_DISTRICT_BONUS : 0;
+    return Object.entries(weights).reduce((sum, [key, weight]) => sum + feature[key] * weight, feature.style * STYLE_WEIGHT + districtBonus - penalty);
   };
 };
 
@@ -147,41 +159,6 @@ const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories,
   return { chosen, targetMeals };
 };
 
-const CLOSED_PENALTY = 1000; // km "ảo": đẩy điểm đang đóng cửa xuống cuối
-const SAME_ROLE_PENALTY = 2.5; // tránh 2 quán cà phê / 2 điểm ăn vặt liền nhau
-const MEAL_AFTER_MEAL_PENALTY = 50; // 2 bữa chính liền nhau gần như không bao giờ hợp lý
-
-/**
- * Xếp thứ tự đi kiểu "điểm gần nhất tiếp theo", có tính giờ: ưu tiên điểm đang mở cửa lúc dự kiến tới nơi
- * và tránh 2 điểm cùng loại liền nhau.
- */
-const orderStops = (origin, places, { modes, people, startTime }) => {
-  const remaining = [...places];
-  const ordered = [];
-  let current = origin;
-  let clock = startTime;
-  let previousRole = null;
-
-  const costOf = (place) => {
-    const travel = planLeg(current, place.location.coordinates, { modes, people });
-    const closed = !isOpenAt(place.opening_hours, addMinutesToTime(clock, travel.minutes));
-    const role = getVisitRole(place);
-    const rolePenalty = role === VISIT_ROLES.MEAL && previousRole === VISIT_ROLES.MEAL ? MEAL_AFTER_MEAL_PENALTY : role === previousRole ? SAME_ROLE_PENALTY : 1;
-    return travel.distanceKm * rolePenalty + (closed ? CLOSED_PENALTY : 0);
-  };
-
-  while (remaining.length > 0) {
-    const next = remaining.reduce((best, place) => (costOf(place) < costOf(best) ? place : best));
-    remaining.splice(remaining.indexOf(next), 1);
-    ordered.push(next);
-    const travel = planLeg(current, next.location.coordinates, { modes, people });
-    clock = addMinutesToTime(clock, travel.minutes + (next.avg_visit_minutes ?? DEFAULT_VISIT_MINUTES));
-    current = next.location.coordinates;
-    previousRole = getVisitRole(next);
-  }
-  return ordered;
-};
-
 // Gộp các đoạn di chuyển theo từng phương tiện: bao nhiêu chặng, km, phút, tiền.
 const summarizeTransport = (stops) => {
   const byMode = new Map();
@@ -207,7 +184,7 @@ const legTo = (previousPlace, place, from, { modes, people }) => {
  * Chờ tới giờ ăn => ưu tiên ở điểm trước lâu hơn (dạo mall / ngồi cà phê thêm, trong khoảng tối đa của nó), còn thiếu mới
  * chừa "thời gian tự do". Điểm người dùng tự chỉnh thời gian (stayOverrides) giữ nguyên, không bị kéo dài.
  */
-const buildStops = (orderedPlaces, { origin, modes, startTime, people }, { targetMeals, stayOverrides, stayExtras }) => {
+const buildStops = (orderedPlaces, { origin, modes, startTime, people, foodTour = false }, { targetMeals, stayOverrides, stayExtras }) => {
   let cursor = [origin.lng, origin.lat];
   let clock = startTime;
   const lastAt = { lastMealMinutes: null, lastSnackMinutes: null };
@@ -222,9 +199,12 @@ const buildStops = (orderedPlaces, { origin, modes, startTime, people }, { targe
     const travel = legTo(orderedPlaces[index - 1], place, cursor, { modes, people });
 
     let reachedAt = addMinutesToTime(clock, travel.minutes);
-    const needed = waitBeforeStop(role, reachedAt, { ...lastAt, targetMeal: targetMeals[index] });
+    const needed = waitBeforeStop(role, reachedAt, { ...lastAt, targetMeal: targetMeals[index], foodTour });
     const previous = stops.at(-1);
-    const extendLimit = previous?.role === VISIT_ROLES.ACTIVITY ? Math.max(previous.stay_range.max, previous.stay_typical + MEAL_RULES.MAX_EXTEND_ACTIVITY_MINUTES) : previous?.stay_range.max;
+    // Ở lại điểm trước lâu hơn để chờ giờ ăn: vui chơi tối đa +45′, quán khác tối đa +30′ so với bình thường
+    const extendLimit = previous?.role === VISIT_ROLES.ACTIVITY
+      ? previous.stay_typical + MEAL_RULES.MAX_EXTEND_ACTIVITY_MINUTES
+      : Math.min(previous?.stay_range.max ?? 0, (previous?.stay_typical ?? 0) + STRETCH.MAX_EXTRA_MINUTES);
     const canExtend = previous && !previous.stay_locked ? Math.max(0, extendLimit - previous.stay_minutes) : 0;
     const extend = Math.min(needed, canExtend);
     const fits = needed - extend <= MEAL_RULES.MAX_FREE_MINUTES; // chờ quá lâu => giữ giờ, bộ kiểm tra cảnh báo
@@ -253,7 +233,7 @@ const buildStops = (orderedPlaces, { origin, modes, startTime, people }, { targe
       travel_minutes: travel.minutes,
       distance_km: travel.distanceKm,
       est_cost: Math.round(avgPrice(place)),
-      open_on_arrival: isOpenAt(place.opening_hours, arrival),
+      open_on_arrival: isOpenForPlan(place, arrival),
       travel: { mode: travel.mode, label: travel.label, emoji: travel.emoji, cost_per_person: travel.costPerPerson, segments: travel.segments },
     });
   });
@@ -262,14 +242,15 @@ const buildStops = (orderedPlaces, { origin, modes, startTime, people }, { targe
 
 const stopsMinutes = (stops) => stops.reduce((total, stop) => total + stop.travel_minutes + stop.stay_minutes + stop.free_minutes_before, 0);
 
-// Lộ trình ngắn hơn thời lượng người dùng chọn => kéo dài các điểm (vui chơi, cà phê trước) trong khoảng cho phép
+// Lộ trình ngắn hơn thời lượng người dùng chọn => kéo dài các điểm (vui chơi, cà phê trước) trong khoảng cho phép,
+// mỗi điểm tối đa +30′ so với bình thường — còn dư thì về sớm, không "giết thời gian" của người dùng
 const stretchExtras = (stops, durationLimit, extras) => {
   let slack = durationLimit - stopsMinutes(stops);
   if (slack < STRETCH.MIN_SLACK_MINUTES) return null;
   const next = { ...extras };
   for (const role of STRETCH.ROLE_PRIORITY) {
     for (const stop of stops.filter((item) => item.role === role && !item.stay_locked)) {
-      const add = Math.min(slack, stop.stay_range.max - stop.stay_minutes);
+      const add = Math.min(slack, stop.stay_range.max - stop.stay_minutes, stop.stay_typical + STRETCH.MAX_EXTRA_MINUTES - stop.stay_minutes);
       if (add <= 0) continue;
       next[String(stop.place.id)] = (next[String(stop.place.id)] ?? 0) + add;
       slack -= add;
@@ -277,6 +258,9 @@ const stretchExtras = (stops, durationLimit, extras) => {
   }
   return slack < durationLimit - stopsMinutes(stops) ? next : null;
 };
+
+// Mỗi bữa chính rơi vào bữa nào trong ngày ("lunch,dinner") — để biết kéo dài có làm lệch giờ ăn không
+const mealSlots = (stops) => stops.filter((stop) => stop.role === VISIT_ROLES.MEAL).map((stop) => mealAt(stop.arrival_time)).join(',');
 
 const STRETCH_ROUNDS = 2; // kéo dài điểm trước giờ ăn làm giảm thời gian chờ => có thể cần thêm 1 lượt
 
@@ -296,6 +280,7 @@ export const buildPlan = (orderedPlaces, planInput, { targetMeals = [], stayOver
     if (!next) break;
     const stretched = buildStops(orderedPlaces, planInput, { targetMeals, stayOverrides, stayExtras: next });
     if (stopsMinutes(stretched.stops) > durationLimit) break; // kéo dài làm lệch giờ ăn => vượt thời lượng: giữ bản trước
+    if (mealSlots(stretched.stops) !== mealSlots(built.stops)) break; // kéo dài đẩy bữa trưa ra khỏi giờ trưa => giữ bản trước
     extras = next;
     built = stretched;
   }
@@ -352,7 +337,61 @@ export const toPlanInput = (criteria) => ({
   durationHours: criteria.duration_hours ?? null,
   // Người dùng tự chọn thời lượng => kéo dài các điểm cho vừa; thời lượng do hệ thống tự ước lượng => không kéo
   fillDuration: criteria.fill_duration !== false,
+  foodTour: Boolean(criteria.food_tour), // food tour: ăn vặt liền tay, không bắt chờ giữa 2 quán
 });
+
+// ── Sắp thứ tự đi cho đỡ chạy vòng ──
+// Khuôn (tripComposer) quyết định đi LÀM GÌ; thứ tự thì thử mọi hoán vị (≤ 6 điểm; nhiều hơn => đổi chỗ từng cặp tới khi
+// hết cải thiện) và chọn cách tốn ít phút di chuyển + chờ nhất mà vẫn đúng luật ăn uống, đúng giờ mở cửa.
+const EXHAUSTIVE_ORDER_MAX_STOPS = 6;
+const MAX_SWAP_ROUNDS = 4;
+const ORDER_PENALTY = { closed: 120, hard: 1000, soft: 30, drinkFirst: 10, mealMoved: 60 };
+
+const permutations = (items) =>
+  items.length <= 1 ? [items] : items.flatMap((item, index) => permutations([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [item, ...rest]));
+
+const orderCost = (items, planInput, { lockedIds, foodTour }) => {
+  const { stops, summary } = buildPlan(items.map((item) => item.place), { ...planInput, fillDuration: false }, { targetMeals: items.map((item) => item.meal) });
+  const { hard, soft } = validatePlanStops(stops, { lockedIds, foodTour });
+  const closed = stops.filter((stop) => !stop.open_on_arrival).length;
+  const drinkFirst = stops.length > 1 && stops[0].role === VISIT_ROLES.DRINK; // không mở đầu chuyến bằng ly cà phê khi còn lựa chọn khác
+  // Ngồi lâu hơn bình thường chỉ để chờ giờ ăn cũng là thời gian chết, như chờ không
+  const idle = summary.free_minutes + stops.reduce((sum, stop) => sum + Math.max(0, stop.stay_minutes - stop.stay_typical), 0);
+  // Bữa trưa dự định mà bị dời sang tối (vì quán đó chỉ mở tối) => thà đổi quán khác còn hơn bỏ bữa trưa
+  const mealMoved = items.filter((item, index) => item.meal && stops[index].role === VISIT_ROLES.MEAL && mealAt(stops[index].arrival_time) !== item.meal).length;
+  return summary.travel_minutes + idle + closed * ORDER_PENALTY.closed + hard.length * ORDER_PENALTY.hard + soft.length * ORDER_PENALTY.soft
+    + (drinkFirst ? ORDER_PENALTY.drinkFirst : 0) + mealMoved * ORDER_PENALTY.mealMoved;
+};
+
+/**
+ * @param {Place[]} places @param {Array<string|null>} targetMeals — bữa dự định của từng điểm (đi kèm điểm khi đổi chỗ)
+ * @returns {{ places: Place[], targetMeals: Array<string|null> }}
+ */
+export const optimizeOrder = (places, targetMeals, planInput, { lockedIds = new Set(), foodTour = false } = {}) => {
+  const items = places.map((place, index) => ({ place, meal: targetMeals[index] ?? null }));
+  const cost = (order) => orderCost(order, planInput, { lockedIds, foodTour });
+  let best = items;
+  let bestCost = cost(items);
+  if (items.length <= EXHAUSTIVE_ORDER_MAX_STOPS) {
+    permutations(items).forEach((order) => {
+      const value = cost(order);
+      if (value < bestCost) [best, bestCost] = [order, value];
+    });
+  } else {
+    for (let round = 0, improved = true; improved && round < MAX_SWAP_ROUNDS; round += 1) {
+      improved = false;
+      for (let i = 0; i < best.length - 1; i += 1) {
+        for (let j = i + 1; j < best.length; j += 1) {
+          const order = [...best];
+          [order[i], order[j]] = [order[j], order[i]];
+          const value = cost(order);
+          if (value < bestCost) [best, bestCost, improved] = [order, value, true];
+        }
+      }
+    }
+  }
+  return { places: best.map((item) => item.place), targetMeals: best.map((item) => item.meal) };
+};
 
 const MAX_REPAIR_ROUNDS = 3;
 const REPLACEMENT_PRICE_FACTOR = 1.5; // điểm thay thế không được đắt hơn quá 1.5 lần điểm cũ (+20k)
@@ -375,7 +414,7 @@ const planWithOpenStops = (ordered, { planInput, ranked, lockedIds, targetMeals 
           place.role === stop.role &&
           place.category === stop.place.category &&
           !usedIds.has(String(place._id)) &&
-          isOpenAt(place.opening_hours, stop.arrival_time) &&
+          isOpenForPlan(place, stop.arrival_time) &&
           avgPrice(place) <= stop.est_cost * REPLACEMENT_PRICE_FACTOR + REPLACEMENT_PRICE_SLACK,
       );
       if (!substitute) return;
@@ -387,6 +426,28 @@ const planWithOpenStops = (ordered, { planInput, ranked, lockedIds, targetMeals 
     plan = buildPlan(chosen, planInput, { targetMeals });
   }
   return plan;
+};
+
+const DURATION_TOLERANCE_MINUTES = 30;
+const MIN_TRIMMED_STOPS = 2;
+
+// Dài quá thời lượng (> 30′) => bỏ bớt điểm hệ thống tự chọn (điểm vui chơi / đồ uống sau cùng trước, giữ bữa ăn),
+// thay vì bắt người dùng đi tới khuya
+const trimToDuration = ({ plan, places, targetMeals }, { planInput, lockedIds }) => {
+  let current = { plan, places, targetMeals };
+  const limit = plan.summary.duration_limit_minutes;
+  const removable = (stops) => {
+    const candidates = stops.map((stop, index) => ({ stop, index })).filter(({ stop }) => !lockedIds.has(String(stop.place.id)));
+    return (candidates.findLast(({ stop }) => stop.role !== VISIT_ROLES.MEAL) ?? candidates.at(-1))?.index ?? -1;
+  };
+  while (limit && current.plan.summary.total_minutes > limit + DURATION_TOLERANCE_MINUTES && current.places.length > MIN_TRIMMED_STOPS) {
+    const drop = removable(current.plan.stops);
+    if (drop === -1) break;
+    const nextPlaces = current.places.filter((_, index) => index !== drop);
+    const nextMeals = current.targetMeals.filter((_, index) => index !== drop);
+    current = { plan: buildPlan(nextPlaces, planInput, { targetMeals: nextMeals }), places: nextPlaces, targetMeals: nextMeals };
+  }
+  return current;
 };
 
 const MAX_VALIDATION_FIXES = 2;
@@ -419,7 +480,7 @@ const OPEN_CHECK_STEP_MINUTES = 30;
 const isOpenDuringTrip = (place, startTime, durationHours) => {
   const steps = Math.ceil((durationHours * MINUTES_PER_HOUR) / OPEN_CHECK_STEP_MINUTES);
   return Array.from({ length: steps }, (_, index) => addMinutesToTime(startTime, index * OPEN_CHECK_STEP_MINUTES)).some((time) =>
-    isOpenAt(place.opening_hours, time),
+    isOpenForPlan(place, time),
   );
 };
 
@@ -467,14 +528,14 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
   const found = [...new Map([...nearby, ...inVenue.map((place) => ({ ...place, distance_m: haversineKm(origin, place.location.coordinates) * 1000 }))].map((place) => [String(place._id), place])).values()];
   const excluded = new Set(excludeIds.map(String));
   const candidates = found
-    .filter((place) => !excluded.has(String(place._id)) && isOpenDuringTrip(place, criteria.start_time, criteria.duration_hours))
+    .filter((place) => !excluded.has(String(place._id)) && isCasualPick(place) && isOpenDuringTrip(place, criteria.start_time, criteria.duration_hours))
     .map((place) => ({ ...place, role: getVisitRole(place) }));
   applyDiet(candidates, criteria.diet);
   if (candidates.length + mustInclude.length === 0) {
     throw new AppError('Không có địa điểm nào khớp bộ lọc. Hãy nới bán kính hoặc bỏ bớt điều kiện.', HTTP_STATUS.UNPROCESSABLE_ENTITY, EXPLORE_ERROR_CODES.NO_MATCHING_PLACES);
   }
 
-  const score = buildScorer([...candidates, ...mustInclude], { tags: criteria.tags, radiusKm: criteria.radius_km });
+  const score = buildScorer([...candidates, ...mustInclude], { tags: criteria.tags, radiusKm: criteria.radius_km, preferDistrict: criteria.prefer_district ?? null });
   const planInput = toPlanInput(criteria);
   const lockedIds = new Set(mustInclude.map((place) => String(place._id)));
   const fillOptions = { score, tripBudget: criteria.trip_budget ?? null, userCategories: criteria.categories, origin, radiusKm: criteria.radius_km, venueId: criteria.venue_id ?? null };
@@ -484,14 +545,19 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
   const options = [];
   for (const strategy of STRATEGIES) {
     const ranked = rankCandidates(candidates, strategy, score);
-    const { chosen: stops, targetMeals } = fillSlots(slots, ranked, { ...fillOptions, strategy });
+    const filled = fillSlots(slots, ranked, { ...fillOptions, strategy });
+    // Người dùng nói rõ thứ tự ("ăn trưa rồi cà phê") => giữ nguyên; còn lại sắp lại cho đỡ chạy vòng
+    const { places: stops, targetMeals } = criteria.sequence?.length
+      ? { places: filled.chosen, targetMeals: filled.targetMeals }
+      : optimizeOrder(filled.chosen, filled.targetMeals, planInput, { lockedIds, foodTour: Boolean(criteria.food_tour) });
     const signature = stops.map((place) => String(place._id)).join(',');
     if (!stops.length || seen.has(signature)) continue; // 2 chiến lược ra cùng lộ trình => bỏ bản trùng
     seen.add(signature);
 
     const repaired = planWithOpenStops(stops, { planInput, ranked, lockedIds, targetMeals });
     const repairedPlaces = repaired.place_ids.map((id) => [...stops, ...ranked].find((place) => String(place._id) === String(id)));
-    const plan = validateAndFix(repaired, { places: repairedPlaces, targetMeals, planInput, lockedIds, foodTour: Boolean(criteria.food_tour) });
+    const trimmed = trimToDuration({ plan: repaired, places: repairedPlaces, targetMeals }, { planInput, lockedIds });
+    const plan = validateAndFix(trimmed.plan, { places: trimmed.places, targetMeals: trimmed.targetMeals, planInput, lockedIds, foodTour: Boolean(criteria.food_tour) });
     if (!plan) continue;
     const finalSignature = plan.place_ids.map(String).join(',');
     if (finalSignature !== signature && seen.has(finalSignature)) continue;
@@ -527,7 +593,7 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
 export const previewItinerary = async (criteria, placeIds, { keepOrder = false, stayOverrides = {} } = {}) => {
   const places = await getPlacesByIds(placeIds);
   const planInput = toPlanInput(criteria);
-  const ordered = keepOrder ? places : orderStops([criteria.origin.lng, criteria.origin.lat], places, planInput);
+  const ordered = keepOrder ? places : optimizeOrder(places, [], planInput, { lockedIds: new Set(placeIds.map(String)), foodTour: Boolean(criteria.food_tour) }).places;
   const plan = buildPlan(ordered, planInput, { stayOverrides });
   // Người dùng tự chọn => không loại, nhưng báo mọi vấn đề (VD 2 bữa chính liền nhau)
   const { hard, soft } = validatePlanStops(plan.stops, { foodTour: Boolean(criteria.food_tour) });

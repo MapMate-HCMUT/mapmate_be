@@ -19,7 +19,6 @@ import Place from '../models/Place.model.js';
 import Itinerary from '../models/Itinerary.model.js';
 import AiSession from '../models/AiSession.model.js';
 import CommunityReport from '../models/CommunityReport.model.js';
-import FloodAlert from '../models/FloodAlert.model.js';
 import UserAchievement from '../models/userAchievement.model.js';
 
 const models = [
@@ -28,7 +27,6 @@ const models = [
   { name: 'itineraries', model: Itinerary },
   { name: 'aisessions', model: AiSession },
   { name: 'communityreports', model: CommunityReport },
-  { name: 'floodalerts', model: FloodAlert },
   { name: 'userachievements', model: UserAchievement },
 ];
 

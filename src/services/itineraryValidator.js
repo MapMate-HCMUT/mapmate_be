@@ -1,7 +1,7 @@
 // Kiểm tra 1 lộ trình đã dựng (giờ đến thật) theo luật ăn uống — chốt chặn cuối trước khi trả cho người dùng.
 // Lỗi "hard" ở điểm hệ thống tự chọn => loại phương án đó; còn lại hiện thành cảnh báo.
 import { MEAL_RULES, MEAL_WINDOWS, VISIT_ROLES } from '../constants/tripRules.js';
-import { mealAt, toMinutes } from './tripComposer.js';
+import { mealAt, snackGapMinutes, toMinutes } from './tripComposer.js';
 
 export const PLAN_ISSUES = {
   MEALS_TOO_CLOSE: 'MEALS_TOO_CLOSE',
@@ -37,7 +37,7 @@ export const validatePlanStops = (stops, { lockedIds = new Set(), foodTour = fal
     if (stop.role === VISIT_ROLES.SNACK) {
       snackCount += 1;
       if (snackCount > (foodTour ? MEAL_RULES.MAX_SNACKS_FOOD_TOUR : MEAL_RULES.MAX_SNACKS)) add(PLAN_ISSUES.TOO_MANY_SNACKS, stop, 'Quá nhiều điểm ăn vặt trong 1 chuyến');
-      if (lastSnack && minutes - toMinutes(lastSnack.arrival_time) < MEAL_RULES.MIN_SNACK_GAP_MINUTES) add(PLAN_ISSUES.SNACKS_TOO_CLOSE, stop, `Hai điểm ăn vặt quá sát nhau (${lastSnack.place.name}, ${stop.place.name})`);
+      if (lastSnack && minutes - toMinutes(lastSnack.arrival_time) < snackGapMinutes(foodTour)) add(PLAN_ISSUES.SNACKS_TOO_CLOSE, stop, `Hai điểm ăn vặt quá sát nhau (${lastSnack.place.name}, ${stop.place.name})`);
       lastSnack = stop;
     }
     if (stop.role === VISIT_ROLES.DRINK && previous?.role === VISIT_ROLES.DRINK) add(PLAN_ISSUES.CONSECUTIVE_DRINKS, stop, `Hai điểm đồ uống liền nhau (${previous.place.name}, ${stop.place.name})`);

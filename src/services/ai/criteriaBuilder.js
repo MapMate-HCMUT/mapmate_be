@@ -297,6 +297,7 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
     diet: remembered?.diet === 'chay' || interpreted.keywords.some((keyword) => /chay/i.test(keyword)) ? 'chay' : null,
     fill_duration: interpreted.duration_hours != null || (isRefine && base.fill_duration === true), // chỉ kéo dài cho đủ giờ khi người dùng nói thời lượng
     district: null, // lọc theo vòng bán kính quanh tâm quận thay vì ranh giới cứng (quán sát ranh vẫn được tính)
+    prefer_district: districtCenter ? district : isRefine ? base.prefer_district ?? null : null, // ...nhưng ưu tiên quán trong đúng quận
   });
 
   // 3. Chuyến đi mall => chọn mall trước để món / rạp người dùng nhắc được tìm TRONG mall đó

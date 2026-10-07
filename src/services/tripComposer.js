@@ -14,6 +14,7 @@ const AVG_MINUTES_PER_STOP = 75;
 const MIN_STOPS = 2;
 const MAX_AUTO_STOPS = ITINERARY_MAX_STOPS; // đi cả ngày vẫn kịp bữa tối
 const EARLY_START = '08:00'; // xuất phát trước giờ này mới tính bữa sáng (đi lúc 9h thường đã ăn sáng ở nhà)
+const MEAL_REQUIRED_HOURS = 5; // đi từ 5 tiếng trở lên (qua giờ ăn) mà không có bữa nào là vô lý — kể cả khi chỉ nói "đi chơi"
 const { MEAL, SNACK, DRINK, ACTIVITY } = VISIT_ROLES;
 
 export const toMinutes = (time) => {
@@ -29,6 +30,9 @@ const wantedRoles = (categories) => {
   if (!categories?.length) return new Set([MEAL, DRINK, ACTIVITY, SNACK]);
   return new Set(categories.flatMap((category) => CATEGORY_ROLES[category] ?? []));
 };
+
+// Khoảng cách tối thiểu giữa 2 điểm ăn vặt: food tour đi liền tay, chuyến thường thì giãn ra
+export const snackGapMinutes = (foodTour) => (foodTour ? MEAL_RULES.MIN_SNACK_GAP_FOOD_TOUR_MINUTES : MEAL_RULES.MIN_SNACK_GAP_MINUTES);
 
 const isFoodOnly = (categories) => categories?.length > 0 && categories.every((category) => category === 'food' || category === 'cafe');
 
@@ -58,7 +62,7 @@ const simulateRoles = ({ count, startTime, durationHours = null, wants, meals, f
     const minutesNow = toMinutes(clock);
     const mealOk = wants.has(MEAL) && !foodTour && mealsLeft > 0 && mealAllowed(mealAt(clock)) && (lastMealAt == null || minutesNow - lastMealAt >= MEAL_RULES.MIN_GAP_MINUTES);
     // food tour: ăn vặt liên tiếp được (chỉ cần giãn cách); chuyến thường: không 2 điểm ăn vặt liền nhau
-    const snackOk = wants.has(SNACK) && snacks < maxSnacks && (foodTour || previous !== SNACK) && (lastSnackAt == null || minutesNow - lastSnackAt >= MEAL_RULES.MIN_SNACK_GAP_MINUTES);
+    const snackOk = wants.has(SNACK) && snacks < maxSnacks && (foodTour || previous !== SNACK) && (lastSnackAt == null || minutesNow - lastSnackAt >= snackGapMinutes(foodTour));
     if (index > 0 && minutesNow >= endMinutes) break; // hết thời lượng người dùng muốn
     const drinkOk = wants.has(DRINK) && previous !== DRINK && drinks < MEAL_RULES.MAX_DRINKS;
     const activityOk = wants.has(ACTIVITY);
@@ -93,6 +97,7 @@ const simulateRoles = ({ count, startTime, durationHours = null, wants, meals, f
 const deriveRoles = (criteria) => {
   const wants = wantedRoles(criteria.categories);
   const durationHours = criteria.duration_hours;
+  if (durationHours >= MEAL_REQUIRED_HOURS) wants.add(MEAL);
   const count = criteria.stop_count ?? autoStopCount(durationHours);
 
   if (criteria.food_tour) {
@@ -136,9 +141,9 @@ export const composeSlots = ({ criteria, mustInclude = [] }) => {
 
 /**
  * Số phút cần lùi lại trước khi vào 1 điểm để hợp giờ ăn: bữa chính chờ tới đúng khung của bữa dự định (targetMeal) hoặc
- * khung giờ ăn kế tiếp, và cách bữa trước ≥ 4 tiếng; ăn vặt cách lần trước ≥ 45 phút. Bên gọi quyết định chờ / ở lâu hơn.
+ * khung giờ ăn kế tiếp, và cách bữa trước ≥ 4 tiếng; ăn vặt cách lần trước ≥ 45 phút (food tour: 20 phút). Bên gọi quyết định chờ / ở lâu hơn.
  */
-export const waitBeforeStop = (role, arrivalTime, { lastMealMinutes = null, lastSnackMinutes = null, targetMeal = null } = {}) => {
+export const waitBeforeStop = (role, arrivalTime, { lastMealMinutes = null, lastSnackMinutes = null, targetMeal = null, foodTour = false } = {}) => {
   const arrival = toMinutes(arrivalTime);
   let notBefore = arrival;
   if (role === MEAL) {
@@ -150,7 +155,7 @@ export const waitBeforeStop = (role, arrivalTime, { lastMealMinutes = null, last
     }
     if (lastMealMinutes != null) notBefore = Math.max(notBefore, lastMealMinutes + MEAL_RULES.MIN_GAP_MINUTES);
   }
-  if (role === SNACK && lastSnackMinutes != null) notBefore = Math.max(notBefore, lastSnackMinutes + MEAL_RULES.MIN_SNACK_GAP_MINUTES);
+  if (role === SNACK && lastSnackMinutes != null) notBefore = Math.max(notBefore, lastSnackMinutes + snackGapMinutes(foodTour));
   return Math.max(0, notBefore - arrival);
 };
 

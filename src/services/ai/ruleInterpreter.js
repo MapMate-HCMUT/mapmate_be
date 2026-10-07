@@ -80,7 +80,7 @@ const extractTime = (lower) => {
   return part ? PART_OF_DAY[part] : null;
 };
 
-const extractDateHint = (lower) => {
+export const extractDateHint = (lower) => {
   if (/(bây giờ|ngay bây giờ|liền|luôn bây giờ|right now)/.test(lower)) return 'now';
   if (/(tối nay|đêm nay)/.test(lower)) return 'tonight';
   if (/(ngày mai|sáng mai|chiều mai|tối mai|\bmai\b)/.test(lower)) return 'tomorrow';
@@ -89,7 +89,7 @@ const extractDateHint = (lower) => {
   return 'unspecified';
 };
 
-const extractDuration = (lower) => {
+export const extractDuration = (lower) => {
   const hours = lower.match(/(\d{1,2})\s*(tiếng|giờ đồng hồ|h đồng hồ)/);
   if (hours) return Math.min(12, Math.max(1, Number(hours[1])));
   if (/cả ngày/.test(lower)) return 8;
