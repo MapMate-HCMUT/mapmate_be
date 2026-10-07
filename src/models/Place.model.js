@@ -1,5 +1,15 @@
 import mongoose from 'mongoose';
-import { CLOSED_BY, DEFAULT_VISIT_MINUTES, PLACE_CATEGORY_VALUES, PLACE_STATUS, PLACE_STATUS_VALUES, PLACE_TAG_VALUES } from '../constants/places.js';
+import {
+  CLOSED_BY,
+  DEFAULT_VISIT_MINUTES,
+  GENZ_CATEGORY_IDS,
+  PLACE_CATEGORY_VALUES,
+  PLACE_STATUS,
+  PLACE_STATUS_VALUES,
+  PLACE_TAG_VALUES,
+  TIKTOK_VIRAL_LEVELS,
+  EXPERIENCE_SETTINGS,
+} from '../constants/places.js';
 import { PLACE_SOURCES, PLACE_SOURCE_VALUES } from '../constants/openData.js';
 import { normalizeSearchText } from '../utils/text.js';
 
@@ -96,6 +106,38 @@ const placeSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // ── Phân loại & Metadata địa điểm dành cho Gen Z (theo TikTok & Social Review) ──
+    genz_category: {
+      type: String,
+      enum: {
+        values: [...GENZ_CATEGORY_IDS, null],
+        message: 'Danh mục Gen Z {VALUE} không hợp lệ',
+      },
+      default: null,
+    },
+    genz_sub_category: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    tiktok_metadata: {
+      trend_score: { type: Number, default: null, min: 0, max: 100 },
+      viral_level: { type: String, enum: [...TIKTOK_VIRAL_LEVELS, null], default: null },
+      views_text: { type: String, default: null },
+      hashtags: { type: [String], default: [] },
+      creators: { type: [String], default: [] },
+      video_highlight: { type: String, default: null },
+      source_url: { type: String, default: null },
+    },
+    experience: {
+      setting: { type: String, enum: [...EXPERIENCE_SETTINGS, null], default: null },
+      suitable_for: { type: [String], default: [] },
+      time_suitability: { type: [String], default: [] },
+      student_friendly: { type: Boolean, default: false },
+      activity_highlights: { type: [String], default: [] },
+    },
+
     // Tên + địa chỉ + đặc sản đã bỏ dấu, viết thường — để tìm "pho hoa" ra "Phở Hòa"
     search_text: {
       type: String,
@@ -184,6 +226,11 @@ placeSchema.index({ parent_place_id: 1 }, { sparse: true });
 
 // Lọc theo nguồn (VD chỉ lấy dữ liệu nhóm đã kiểm tra) + xếp "Phổ biến"
 placeSchema.index({ source: 1 });
+
+// Lọc & gợi ý theo tiêu chí Gen Z
+placeSchema.index({ genz_category: 1 });
+placeSchema.index({ 'tiktok_metadata.viral_level': 1 });
+placeSchema.index({ 'experience.student_friendly': 1 });
 
 export const buildPlaceSearchText = ({ name = '', address = '', district = '', specialties = [], cuisines = [] }) =>
   normalizeSearchText([name, address, district, ...specialties, ...cuisines].join(' '));

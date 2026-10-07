@@ -31,6 +31,8 @@ export const PLACE_TAGS = [
 ];
 export const PLACE_TAG_VALUES = PLACE_TAGS.map((tag) => tag.value);
 
+export { GENZ_CATEGORIES, GENZ_CATEGORY_IDS, TIKTOK_VIRAL_LEVELS, EXPERIENCE_SETTINGS, SUITABLE_AUDIENCE, TIME_SUITABILITY } from './genzPlaces.js';
+
 export const PLACE_SORTS = [
   { value: 'recommended', label: 'Đề xuất' },
   { value: 'distance', label: 'Gần nhất' },
