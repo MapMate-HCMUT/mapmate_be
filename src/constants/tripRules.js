@@ -40,12 +40,13 @@ export const MEAL_RULES = {
   MAX_SNACKS: 2, // tối đa 2 điểm ăn vặt / chuyến (food tour được nhiều hơn)
   MAX_SNACKS_FOOD_TOUR: 4,
   MIN_SNACK_GAP_MINUTES: 45, // 2 điểm ăn vặt cách nhau ≥ 45 phút
+  MIN_SNACK_GAP_FOOD_TOUR_MINUTES: 20, // food tour: ăn xong đi quán kế luôn, không bắt chờ
   MAX_DRINKS: 2, // tối đa 2 điểm đồ uống / chuyến (không ai uống cà phê 3 lần 1 buổi)
-  // Tới sớm hơn giờ ăn hợp lý => chừa "thời gian tự do" (dạo quanh) tối đa 90 phút; lâu hơn thì giữ giờ + cảnh báo
-  MAX_FREE_MINUTES: 90,
-  // ...vẫn chưa đủ => ở lại điểm VUI CHƠI ngay trước đó lâu hơn, tới +90 phút so với bình thường (dạo phố / bảo tàng thêm)
-  // — kể cả khi vượt khoảng ở lại thường của điểm đó, vì chờ tới giờ ăn hợp lý quan trọng hơn
-  MAX_EXTEND_ACTIVITY_MINUTES: 90,
+  // Tới sớm hơn giờ ăn hợp lý => chừa "thời gian tự do" tối đa 30 phút; lâu hơn thì ăn luôn + cảnh báo
+  // (bắt người dùng chờ / lang thang cả tiếng chỉ để đúng giờ ăn là phí thời gian của họ)
+  MAX_FREE_MINUTES: 30,
+  // ...trước đó ưu tiên ở lại điểm VUI CHƠI ngay trước lâu hơn, tối đa +45 phút so với bình thường
+  MAX_EXTEND_ACTIVITY_MINUTES: 45,
 };
 
 // Thời gian ở lại là 1 KHOẢNG quanh avg_visit_minutes (mức "bình thường"), không phải 1 con số cố định:
@@ -65,8 +66,10 @@ export const STAY_RANGE = {
 export const GROUP_STAY = { BASE_PEOPLE: 2, PEOPLE_PER_STEP: 2, MINUTES_PER_STEP: 10, MAX_EXTRA: { meal: 30, drink: 20, snack: 10, activity: 0 } };
 
 // Lộ trình ngắn hơn thời lượng người dùng muốn quá 30′ => kéo dài các điểm (trong khoảng cho phép) cho vừa.
+// Thời lượng là GIỚI HẠN TRÊN, không phải chỉ tiêu: mỗi điểm chỉ dài thêm tối đa 30′ so với bình thường —
+// còn dư thì kết thúc sớm (báo "còn dư X phút"), không kéo 1 quán cà phê thành 2 tiếng.
 // Thứ tự ưu tiên kéo dài: vui chơi (dạo mall, công viên) > đồ uống (ngồi cà phê) > bữa chính > ăn vặt
-export const STRETCH = { MIN_SLACK_MINUTES: 30, ROLE_PRIORITY: ['activity', 'drink', 'meal', 'snack'] };
+export const STRETCH = { MIN_SLACK_MINUTES: 30, MAX_EXTRA_MINUTES: 30, ROLE_PRIORITY: ['activity', 'drink', 'meal', 'snack'] };
 
 // Ước lượng khi dựng khuôn (chưa biết quán cụ thể): thời gian ở lại + di chuyển trung bình mỗi điểm (phút)
 export const ROLE_SLOT_MINUTES = { meal: 75, snack: 40, drink: 60, activity: 90 };
@@ -77,3 +80,15 @@ export const ROLE_MIN_COST = { meal: 30000, snack: 15000, drink: 20000, activity
 export const KEYWORD_MIN_COST = { buffet: 150000, 'hải sản': 120000, lẩu: 100000, nướng: 100000, bbq: 100000, sushi: 120000, rooftop: 120000 };
 // Thời gian tối thiểu cho 1 điểm dừng kể cả di chuyển (phút) — để phát hiện "8 chỗ trong 1 tiếng"
 export const MIN_STOP_MINUTES = 45;
+
+// ── Điểm hệ thống TỰ chọn (không áp cho điểm người dùng gọi tên) ──
+// Chùa, nhà thờ, bảo tàng... chưa rõ giờ => coi như chỉ mở ban ngày (không gợi ý "Nhà thờ Đức Bà lúc 21:40")
+export const DAYTIME_ONLY = {
+  KINDS: ['worship', 'museum', 'gallery'],
+  NAME: /^(chùa|nhà thờ|thánh đường|bảo tàng|đình|đền|miếu|thiền viện|tịnh xá|di tích|nghĩa trang)|\b(museum|temple|pagoda|church|cathedral)\b/i,
+  HOURS: { open: '07:00', close: '17:00' },
+};
+// Sân tập thể thao, chỗ làm việc / học nhóm không phải chỗ đi chơi thông thường — chỉ chọn khi người dùng gọi đúng tên
+export const NOT_LEISURE_NAME = /(tennis|pickleball|gym|fitness|yoga|sân bóng|bóng đá|cầu lông|bóng rổ|golf|võ thuật|coworking|clb tiếng anh|câu lạc bộ tiếng anh)/i;
+// Cửa hàng chưa rõ loại (điện máy, ô tô, tạp hoá...) không phải điểm "mua sắm dạo chơi" — chỉ lấy mall, chợ, nhà sách
+export const LEISURE_SHOP_NAME = /(vincom|aeon|lotte|giga ?mall|crescent|takashimaya|parkson|thiso|vivo ?city|estella|saigon centre|plaza|mall|trung tâm thương mại|chợ|nhà sách|hiệu sách|đường sách|book)/i;

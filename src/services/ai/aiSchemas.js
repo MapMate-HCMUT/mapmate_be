@@ -66,8 +66,7 @@ export const buildAdviceSchema = ({ optionKeys = [], placeIds = [] } = {}) => {
       .array(z.object({ option_key: optionKey, headline: z.string().max(80), why: z.string().max(300) }))
       .max(optionKeys.length),
     recommended_place_ids: z.array(placeId).max(placeIds.length),
-    tips: z.array(z.string().max(160)).max(4),
-    warnings: z.array(z.string().max(160)).max(3),
+    // Mẹo + cảnh báo do server dựng từ dữ liệu (adviceTemplates) — model không tự viết (hay ra lời khuyên vô nghĩa)
     follow_up_suggestions: z.array(z.string().max(80)).max(3),
   });
 };

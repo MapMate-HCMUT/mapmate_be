@@ -4,7 +4,7 @@ import { AI_INTENTS, AI_INTERPRETER_TIER, AI_MAX_OUTPUT_TOKENS, AI_REASONING_EFF
 import { EXPLORE_CATEGORIES, PLACE_TAGS } from '../../constants/places.js';
 import { interpretationSchema } from './aiSchemas.js';
 import { callStructured, isLlmConfigured } from './llmClient.js';
-import { interpretWithRules } from './ruleInterpreter.js';
+import { extractDateHint, extractDuration, interpretWithRules } from './ruleInterpreter.js';
 
 const vocabulary = (items) => items.map((item) => `${item.value} (${item.label})`).join(', ');
 
@@ -63,6 +63,16 @@ Ghi nhớ về người dùng (bối cảnh để hiểu đúng ý, VD "ăn chay
 ${memoryText}
 </user_memory>` : ''}`;
 
+// Ngày theo model vs theo luật (bắt chữ rõ ràng: "chiều mai", "cuối tuần"): model bỏ trống, hoặc nói "hôm nay"
+// trong khi câu ghi rõ "mai" / "cuối tuần" => tin luật (đi chiều mai mà xếp lịch ngay tối nay là sai hẳn)
+const SAME_DAY_HINTS = ['now', 'today', 'tonight'];
+const FUTURE_HINTS = ['tomorrow', 'weekend'];
+const reconcileDateHint = (modelHint, ruleHint) => {
+  if (ruleHint === 'unspecified') return modelHint;
+  if (modelHint === 'unspecified' || (FUTURE_HINTS.includes(ruleHint) && SAME_DAY_HINTS.includes(modelHint))) return ruleHint;
+  return modelHint;
+};
+
 /**
  * @param {{ text, flags, history: Array<{role, content}>, previousCriteria, nowLabel, tier }} input
  * @returns {{ interpretation, source: 'llm' | 'rules', model?, usage?, error? }}
@@ -87,7 +97,13 @@ export const interpretRequest = async ({ text, flags, history, previousCriteria,
       maxTokens: AI_MAX_OUTPUT_TOKENS.interpreter,
       reasoningEffort: AI_REASONING_EFFORT.interpreter,
     });
-    return { interpretation: result.data, source: 'llm', model: result.model, usage: result.usage, latencyMs: result.latencyMs };
+    // Model đôi khi bỏ sót thời lượng / ngày nói rõ ("cả ngày", "3 tiếng", "chiều mai") => luật bắt lại,
+    // không để hệ thống tự đoán 4 tiếng hay hiểu "chiều mai" thành "ngay bây giờ"
+    const interpretation = result.data;
+    const lower = text.toLowerCase();
+    interpretation.criteria.duration_hours ??= extractDuration(lower);
+    interpretation.criteria.date_hint = reconcileDateHint(interpretation.criteria.date_hint, extractDateHint(lower));
+    return { interpretation, source: 'llm', model: result.model, usage: result.usage, latencyMs: result.latencyMs };
   } catch (error) {
     return fallback(error);
   }

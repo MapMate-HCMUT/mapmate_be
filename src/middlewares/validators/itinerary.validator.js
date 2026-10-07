@@ -39,6 +39,7 @@ export const tripCriteriaSchema = z.object({
   duration_hours: z.coerce.number(DURATION_MESSAGE).int(DURATION_MESSAGE).min(DURATION_FILTER.min, DURATION_MESSAGE).max(DURATION_FILTER.max, DURATION_MESSAGE).default(DURATION_FILTER.default),
   open_only: z.boolean().default(false),
   district: z.string().trim().max(60).nullable().optional(),
+  prefer_district: z.string().trim().max(60).nullable().optional(), // quận người dùng nói => ưu tiên (không lọc cứng) điểm trong quận đó
   // ── Khuôn lộ trình (AI Planner điền; bộ lọc Khám phá có thể bỏ trống) — xem services/tripComposer.js ──
   sequence: z.array(z.enum(VISIT_ROLE_VALUES)).max(ITINERARY_MAX_STOPS).optional(), // thứ tự người dùng nói: ["meal", "drink"]
   meals: z.array(z.enum(MEAL_VALUES)).max(MEAL_VALUES.length).optional(), // các bữa muốn ăn: ["lunch"]

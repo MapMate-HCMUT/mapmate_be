@@ -1,5 +1,6 @@
 // Lời tư vấn dựng theo mẫu (không dùng LLM) — dùng khi chưa có GROQ_API_KEY hoặc Groq lỗi.
 // Cùng khuôn với output của Agent tư vấn (buildAdviceSchema) để giao diện không phải phân biệt.
+// Mẹo + cảnh báo LUÔN lấy từ đây (cả khi có LLM): suy từ dữ liệu thật, không để model tự nghĩ ra lời khuyên chung chung.
 import { AI_INTENTS } from '../../constants/ai.js';
 import { MEAL_WINDOWS, VISIT_ROLE_LABELS } from '../../constants/tripRules.js';
 import { formatVnd } from '../../utils/money.js';
@@ -8,22 +9,61 @@ const MINUTES_PER_HOUR = 60;
 const formatMinutes = (minutes) => (minutes >= MINUTES_PER_HOUR ? `${Math.floor(minutes / MINUTES_PER_HOUR)} giờ ${minutes % MINUTES_PER_HOUR ? `${minutes % MINUTES_PER_HOUR} phút` : ''}`.trim() : `${minutes} phút`);
 const TRIP_FOLLOW_UPS = ['Rẻ hơn chút', 'Gần hơn', 'Thêm quán cà phê'];
 const VEHICLE_TIPS = {
-  bike: 'Đi xe máy nhớ mang áo mưa — chiều tối mùa mưa ở TP.HCM hay có mưa rào.',
   car: 'Khu trung tâm khó đỗ ô tô, nên tìm bãi giữ xe trước.',
   walk: 'Đi bộ nhớ mang nước và chọn giờ mát (sáng sớm hoặc chiều tối).',
   public: 'Metro số 1 chạy khoảng 5:00–22:00; xe buýt đang miễn phí đến hết 31/12/2026.',
 };
+const RAINY_MONTHS = { from: 5, to: 11 }; // mùa mưa TP.HCM
+const AFTERNOON_FROM = '14:00';
+const LATE_END = '22:00'; // về sau giờ này: xe buýt / metro thưa hoặc đã nghỉ
+const FINISH_EARLY_NOTE_MINUTES = 30;
+const MAX_TIPS = 2;
+const MAX_WARNINGS = 3;
+
+// Dòng tóm tắt dưới tên lộ trình: con số khác biệt (tên lộ trình đã hiện trên thẻ, không lặp lại)
+const optionHeadline = ({ summary }) => `${formatMinutes(summary.total_minutes)} · ${formatVnd(summary.cost_per_person)}/người · ${summary.total_distance_km} km`;
 
 const empty = { option_notes: [], recommended_place_ids: [], tips: [], warnings: [], follow_up_suggestions: [] };
 
-const tripWarnings = (option) => {
+// userDuration = người dùng tự nói thời lượng (thời lượng hệ thống tự ước lượng thì vượt cũng không phải lỗi của ai)
+const tripWarnings = (option, userDuration) => {
   const { summary } = option;
   const warnings = [];
   if (summary.within_budget === false) warnings.push(`Lộ trình "${option.label}" vượt ngân sách ${formatVnd(-summary.budget_left)}/người.`);
-  if (summary.within_duration === false) warnings.push('Lộ trình dài hơn thời lượng bạn muốn.');
+  if (userDuration && summary.within_duration === false) warnings.push(`Lộ trình dài hơn thời lượng bạn muốn khoảng ${formatMinutes(-summary.time_left_minutes)}.`);
   if (summary.all_open === false) warnings.push('Có điểm có thể chưa mở cửa lúc bạn tới.');
   if (summary.unknown_hours_stops > 0) warnings.push(`${summary.unknown_hours_stops} điểm chưa rõ giờ mở cửa — nên gọi hỏi trước.`);
   return warnings.slice(0, 3);
+};
+
+// Mẹo thực tế suy từ dữ liệu chuyến đi (tối đa 2) — không có gì đáng nói thì để trống
+export const buildTripTips = ({ criteria, option = null, weather = null, now = new Date() }) => {
+  const vehicle = criteria?.vehicle;
+  const start = option?.summary.start_time ?? criteria?.start_time ?? '';
+  const end = option?.summary.end_time ?? '';
+  const month = now.getMonth() + 1;
+  const tips = [];
+  if (option && criteria?.fill_duration && option.summary.time_left_minutes >= FINISH_EARLY_NOTE_MINUTES) {
+    tips.push(`Lộ trình xong sớm hơn thời gian bạn có khoảng ${formatMinutes(option.summary.time_left_minutes)} — muốn đi thêm thì nhắn mình "thêm 1 điểm nữa".`);
+  }
+  if (['walk', 'public', 'bus'].includes(vehicle) && end >= LATE_END) tips.push(`Chuyến đi kết thúc lúc ${end} — xe buýt / metro có thể đã nghỉ, nên đặt xe về.`);
+  if (vehicle === 'bike' && !weather?.rain_likely && month >= RAINY_MONTHS.from && month <= RAINY_MONTHS.to && start >= AFTERNOON_FROM) {
+    tips.push('Đang mùa mưa, chiều tối hay có mưa rào — để sẵn áo mưa trong cốp xe.');
+  }
+  if (VEHICLE_TIPS[vehicle]) tips.push(VEHICLE_TIPS[vehicle]);
+  return tips.slice(0, MAX_TIPS);
+};
+
+// Cảnh báo chỉ từ dữ liệu: dự báo mưa, vượt ngân sách / thời lượng, điểm chưa mở, chưa rõ giờ, luật ăn uống
+export const buildTripWarnings = ({ criteria = null, options = [], places = [], weather = null }) => {
+  const [best] = options;
+  const unknownHours = places.filter((place) => place.hours_known === false).length;
+  return [
+    weatherWarning(weather),
+    ...(best ? tripWarnings(best, Boolean(criteria?.fill_duration)) : []),
+    ...(best?.summary.issues ?? []),
+    !best && unknownHours ? `${unknownHours} chỗ chưa rõ giờ mở cửa — nên gọi hỏi trước.` : null,
+  ].filter(Boolean).slice(0, MAX_WARNINGS);
 };
 
 const weatherWarning = (weather) => (weather?.rain_likely ? `Dự báo ${weather.description.toLowerCase()} lúc ${weather.time.slice(11)}, khả năng mưa ${weather.rain_probability}% — nhớ mang áo mưa.` : null);
@@ -53,7 +93,8 @@ export const buildTemplateAdvice = ({ intent, criteria, assumptions = [], option
   }
 
   const assumptionNote = assumptions.length ? ` Lưu ý: ${assumptions.slice(0, 2).join('; ')} — bạn sửa nếu chưa đúng nhé.` : '';
-  const tips = criteria?.vehicle && VEHICLE_TIPS[criteria.vehicle] ? [VEHICLE_TIPS[criteria.vehicle]] : [];
+  const tips = buildTripTips({ criteria, option: options[0] ?? null, weather });
+  const warnings = buildTripWarnings({ criteria, options, places, weather });
 
   if (intent === AI_INTENTS.FIND_PLACES) {
     if (places.length === 0) return { ...empty, reply: `Mình chưa tìm thấy chỗ phù hợp${retrievalError ? '' : ' trong khu vực này'}. Bạn thử nới bán kính hoặc đổi từ khoá nhé.`, follow_up_suggestions: ['Tìm rộng hơn', 'Gợi ý chỗ khác'] };
@@ -63,6 +104,7 @@ export const buildTemplateAdvice = ({ intent, criteria, assumptions = [], option
       reply: `Mình tìm được ${places.length} chỗ hợp ý, nổi bật là ${top.map((place) => place.name).join(', ')}.${assumptionNote}`,
       recommended_place_ids: top.map((place) => String(place.id)),
       tips,
+      warnings,
       follow_up_suggestions: ['Lên lộ trình với các quán này', 'Rẻ hơn chút'],
     };
   }
@@ -78,10 +120,10 @@ export const buildTemplateAdvice = ({ intent, criteria, assumptions = [], option
   const stops = best.stops.map((stop) => `${stop.place.name} (${stop.meal ? MEAL_WINDOWS[stop.meal].label : VISIT_ROLE_LABELS[stop.role]?.toLowerCase() ?? ''} ${stop.arrival_time})`).join(' → ');
   return {
     reply: `Mình lên được ${options.length} lộ trình. Gợi ý "${best.label}": ${stops}, khoảng ${formatMinutes(best.summary.total_minutes)}, ${formatVnd(best.summary.cost_per_person)}/người.${assumptionNote}`,
-    option_notes: options.map((option) => ({ option_key: option.key, headline: option.label, why: option.description })),
+    option_notes: options.map((option) => ({ option_key: option.key, headline: optionHeadline(option), why: option.description })),
     recommended_place_ids: [],
     tips,
-    warnings: [weatherWarning(weather), ...tripWarnings(best)].filter(Boolean).slice(0, 3),
+    warnings,
     follow_up_suggestions: TRIP_FOLLOW_UPS,
   };
 };
