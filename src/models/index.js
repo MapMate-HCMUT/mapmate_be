@@ -7,7 +7,6 @@ export { default as Place } from './Place.model.js';
 export { default as Itinerary } from './Itinerary.model.js';
 export { default as AiSession } from './AiSession.model.js';
 export { default as CommunityReport } from './CommunityReport.model.js';
-export { default as FloodAlert } from './FloodAlert.model.js';
 export { Friendship } from './friendship.model.js';
 export { Post } from './post.model.js';
 export { PostLike } from './postLike.model.js';

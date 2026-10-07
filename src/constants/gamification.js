@@ -43,7 +43,6 @@ export const LEVELS = [
 export const BADGES = [
   { code: 'pioneer', name: 'Tiên phong', icon: '🏅', xpReward: 20, description: 'Hoàn thành hoạt động đầu tiên', stat: 'total_actions', threshold: 1 },
   { code: 'checkin_master', name: 'Check-in Master', icon: '📸', xpReward: 100, description: 'Check-in 10 địa điểm', stat: 'checkins', threshold: 10 },
-  { code: 'flood_fighter', name: 'Dũng sĩ né ngập', icon: '🌊', xpReward: 100, description: 'Báo cáo 5 điểm ngập', stat: 'flood_reports', threshold: 5 },
   { code: 'traffic_hero', name: 'Cứu tinh giao thông', icon: '🦸', xpReward: 80, description: 'Gửi 10 báo cáo tình trạng đường', stat: 'road_reports', threshold: 10 },
   { code: 'explorer', name: 'Explorer', icon: '🗺️', xpReward: 150, description: 'Hoàn thành 10 chuyến đi khám phá', stat: 'trips_completed', threshold: 10 },
   { code: 'streak_7', name: 'Chuỗi 7 ngày', icon: '🔥', xpReward: 50, description: 'Mở app khám phá 7 ngày liên tiếp', stat: 'streak_days', threshold: 7 },

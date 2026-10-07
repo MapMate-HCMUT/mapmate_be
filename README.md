@@ -61,7 +61,7 @@ npm run seed:users     # (tuỳ chọn) tạo 7 tài khoản demo, mật khẩu:
 | `TOKEN_MISSING` / `TOKEN_INVALID` / `TOKEN_EXPIRED` | 401 | Thiếu / sai / hết hạn token |
 | `TOO_MANY_REQUESTS` | 429 | Vượt rate limit |
 
-## Cộng điểm từ các tính năng khác (check-in, báo ngập...)
+## Cộng điểm từ các tính năng khác (check-in, báo cáo đường...)
 
 Không tự `$inc` XP trong service khác — luôn gọi `rewardAction`:
 
