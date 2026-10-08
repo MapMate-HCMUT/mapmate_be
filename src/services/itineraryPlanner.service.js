@@ -10,6 +10,7 @@ import { clampStayOverride, getStayRange } from '../utils/stayTime.js';
 import { insideVenueLeg, planLeg, resolveModes } from '../utils/transport.js';
 import { sameVenue, venueOf } from '../utils/venue.js';
 import { normalizeSearchText } from '../utils/text.js';
+import { activityGroupOf, activityTypeOf } from '../utils/activityType.js';
 import { getVisitRole } from '../utils/visitRole.js';
 import { validatePlanStops } from './itineraryValidator.js';
 import { findCandidatePlaces, findPlacesInVenue, getPlacesByIds, toPlaceView } from './place.service.js';
@@ -65,6 +66,37 @@ const avgPrice = (place) => (place.price_range.min + place.price_range.max) / 2;
  * Mỗi chiến lược là 1 bộ trọng số trên 4 tiêu chí đã chuẩn hoá về 0–1 => từ cùng 1 bộ lọc ra nhiều lộ trình khác nhau.
  * Thêm chiến lược mới (VD "ít ngập nhất", "AI gợi ý") chỉ cần thêm 1 phần tử vào đây.
  */
+// ── Đa dạng gợi ý: mỗi lần hỏi ra lộ trình khác, mỗi lộ trình phối nhiều kiểu chơi (bắn cung + mall + cà phê...) ──
+const DIVERSITY = {
+  POOL_SIZE: 8, // mỗi vị trí bốc thăm trong 8 ứng viên tốt nhất (không phải luôn lấy hạng 1)
+  TEMPERATURE: 0.12, // độ "ngẫu hứng": ứng viên kém hạng 1 cỡ 0.12 điểm vẫn có ~1/3 cơ hội của hạng 1
+  SAME_TYPE_PENALTY: 0.4, // điểm vui chơi cùng kiểu với 1 điểm đã có trong lộ trình (2 rạp phim, 2 bảo tàng...)
+  SAME_GROUP_PENALTY: 0.25, // khác kiểu nhưng cùng nhóm (nhà thờ rồi bưu điện = cùng "tham quan") => ưu tiên đổi nhóm (tham quan + bắn cung + mall)
+  OTHER_OPTION_PENALTY: 0.25, // đã nằm trong phương án khác của lần gợi ý này => 3 phương án khác hẳn nhau
+  RECENT_PENALTY: 0.6, // vừa gợi ý ở lượt trước trong cùng cuộc trò chuyện
+};
+
+// Chọn ngẫu nhiên có trọng số (softmax theo điểm) trong nhóm ứng viên tốt nhất
+const pickWeighted = (items, scoreOf, random) => {
+  const pool = items.map((item) => ({ item, score: scoreOf(item) })).sort((a, b) => b.score - a.score).slice(0, DIVERSITY.POOL_SIZE);
+  const weights = pool.map(({ score }) => Math.exp((score - pool[0].score) / DIVERSITY.TEMPERATURE));
+  let ticket = random() * weights.reduce((sum, weight) => sum + weight, 0);
+  for (let index = 0; index < pool.length; index += 1) {
+    ticket -= weights[index];
+    if (ticket <= 0) return pool[index].item;
+  }
+  return pool.at(-1).item;
+};
+
+const shuffle = (items, random) => {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(random() * (index + 1));
+    [result[index], result[other]] = [result[other], result[index]];
+  }
+  return result;
+};
+
 const STRATEGIES = [
   {
     key: 'budget', label: 'Tiết kiệm nhất', emoji: '💸',
@@ -72,9 +104,15 @@ const STRATEGIES = [
     weights: { price: 0.6, rating: 0.2, popularity: 0.05, proximity: 0.15 },
   },
   {
-    key: 'top_rated', label: 'Được yêu thích nhất', emoji: '⭐',
-    description: 'Ưu tiên nơi có điểm đánh giá cao và nhiều lượt nhận xét',
-    weights: { price: 0.05, rating: 0.55, popularity: 0.3, proximity: 0.1 },
+    key: 'top_rated', label: 'Đánh giá cao', emoji: '⭐',
+    description: 'Ưu tiên nơi được đánh giá tốt — không nhất thiết là chỗ đông nhất',
+    weights: { price: 0.05, rating: 0.65, popularity: 0.1, proximity: 0.2 },
+  },
+  {
+    key: 'hidden_gem', label: 'Lạ & mới', emoji: '🧭',
+    description: 'Những chỗ hay nhưng ít người biết — đổi gió so với các điểm quen thuộc',
+    // Trừ điểm độ nổi tiếng: nơi ít lượt nhận xét mà vẫn được đánh giá tốt sẽ lên đầu
+    weights: { price: 0.15, rating: 0.4, popularity: -0.25, proximity: 0.2 },
   },
   {
     key: 'nearby', label: 'Gần & ít di chuyển', emoji: '📍',
@@ -117,8 +155,16 @@ const rankCandidates = (candidates, strategy, score) =>
  * Lấp quán thật vào từng vị trí của khuôn (tripComposer): đúng vai trò + loại hình, vừa phần ngân sách của vị trí đó,
  * ưu tiên điểm tốt theo chiến lược VÀ gần điểm trước. Giữ nguyên thứ tự khuôn (không sắp lại) => đúng giờ ăn, đúng ý người dùng.
  */
-const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories, origin, radiusKm, venueId = null }) => {
+const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories, origin, radiusKm, venueId = null, random, avoidIds, otherOptionIds }) => {
   const chosen = [];
+  // Kiểu hoạt động đã có trong lộ trình (kể cả điểm người dùng tự chọn) => điểm vui chơi tiếp theo nên khác kiểu
+  const fixedActivities = slots.filter((slot) => slot.fixed && slot.role === VISIT_ROLES.ACTIVITY).map((slot) => slot.fixed);
+  const usedTypes = new Set(fixedActivities.map(activityTypeOf));
+  const usedGroups = new Set(fixedActivities.map(activityGroupOf));
+  const varietyPenalty = (place) => {
+    if (usedTypes.has(activityTypeOf(place))) return DIVERSITY.SAME_TYPE_PENALTY;
+    return usedGroups.has(activityGroupOf(place)) ? DIVERSITY.SAME_GROUP_PENALTY : 0;
+  };
   const targetMeals = []; // bữa dự định của từng điểm đã chọn (để chờ đúng giờ ăn)
   const usedIds = new Set(slots.filter((slot) => slot.fixed).map((slot) => String(slot.fixed._id)));
   let spent = slots.reduce((sum, slot) => sum + (slot.fixed ? avgPrice(slot.fixed) : 0), 0);
@@ -147,8 +193,17 @@ const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories,
       .sort((a, b) => venueBonus(b) - venueBonus(a)) // điểm trong mall vào vòng xét trước (giữ thứ tự chiến lược trong từng nhóm)
       .slice(0, LEG_LOOKAHEAD);
     if (!matches.length) return; // không có quán phù hợp => bỏ vị trí này (lộ trình ngắn hơn, không nhét bừa)
-    const legScore = (place) => score(place, strategy.weights) + venueBonus(place) - LEG_DISTANCE_WEIGHT * Math.min(1, haversineKm(previous, place.location.coordinates) / radiusKm);
-    const pick = matches.reduce((best, place) => (legScore(place) > legScore(best) ? place : best));
+    const diversityPenalty = (place) =>
+      (slot.role === VISIT_ROLES.ACTIVITY ? varietyPenalty(place) : 0) +
+      (otherOptionIds.has(String(place._id)) ? DIVERSITY.OTHER_OPTION_PENALTY : 0) +
+      (avoidIds.has(String(place._id)) ? DIVERSITY.RECENT_PENALTY : 0);
+    const legScore = (place) =>
+      score(place, strategy.weights) + venueBonus(place) - diversityPenalty(place) - LEG_DISTANCE_WEIGHT * Math.min(1, haversineKm(previous, place.location.coordinates) / radiusKm);
+    const pick = pickWeighted(matches, legScore, random);
+    if (slot.role === VISIT_ROLES.ACTIVITY) {
+      usedTypes.add(activityTypeOf(pick));
+      usedGroups.add(activityGroupOf(pick));
+    }
     chosen.push(pick);
     targetMeals.push(slot.meal);
     usedIds.add(String(pick._id));
@@ -510,7 +565,8 @@ const toPlaceFilters = (criteria) => ({
 
 // POST /api/itineraries/suggest — từ bộ lọc (+ các điểm đã chọn) sinh ra tối đa 3 lộ trình khác nhau.
 // `excludeIds`: nơi người dùng không muốn đi (AI Planner: "bỏ quán X", "đừng đưa vào Bùi Viện").
-export const suggestItineraries = async (criteria, mustIncludeIds = [], { excludeIds = [] } = {}) => {
+// `avoidIds`: nơi vừa gợi ý ở lượt trước => hạn chế lặp lại. Mỗi lần gọi bốc thăm lại => lộ trình khác nhau (`random` để test).
+export const suggestItineraries = async (criteria, mustIncludeIds = [], { excludeIds = [], avoidIds = [], random = Math.random } = {}) => {
   const origin = [criteria.origin.lng, criteria.origin.lat];
   const mustIncludeRaw = await getPlacesByIds(mustIncludeIds);
   const mustInclude = mustIncludeRaw.map((place) => ({ ...place, distance_m: haversineKm(origin, place.location.coordinates) * 1000 }));
@@ -538,12 +594,19 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
   const score = buildScorer([...candidates, ...mustInclude], { tags: criteria.tags, radiusKm: criteria.radius_km, preferDistrict: criteria.prefer_district ?? null });
   const planInput = toPlanInput(criteria);
   const lockedIds = new Set(mustInclude.map((place) => String(place._id)));
-  const fillOptions = { score, tripBudget: criteria.trip_budget ?? null, userCategories: criteria.categories, origin, radiusKm: criteria.radius_km, venueId: criteria.venue_id ?? null };
+  const otherOptionIds = new Set();
+  const fillOptions = {
+    score, tripBudget: criteria.trip_budget ?? null, userCategories: criteria.categories, origin, radiusKm: criteria.radius_km, venueId: criteria.venue_id ?? null,
+    random, avoidIds: new Set(avoidIds.map(String)), otherOptionIds,
+  };
 
   // 3. Mỗi chiến lược lấp khuôn theo trọng số riêng => tối đa 3 phương án khác nhau; phương án vi phạm luật ăn uống bị loại
   const seen = new Set();
   const options = [];
-  for (const strategy of STRATEGIES) {
+  // Thứ tự chiến lược đổi mỗi lần (luôn có "Lạ & mới" trong 3 phương án đầu)
+  const others = shuffle(STRATEGIES.filter((item) => item.key !== 'hidden_gem'), random);
+  const strategyOrder = [...others.slice(0, 2), STRATEGIES.find((item) => item.key === 'hidden_gem'), ...others.slice(2)];
+  for (const strategy of strategyOrder) {
     const ranked = rankCandidates(candidates, strategy, score);
     const filled = fillSlots(slots, ranked, { ...fillOptions, strategy });
     // Người dùng nói rõ thứ tự ("ăn trưa rồi cà phê") => giữ nguyên; còn lại sắp lại cho đỡ chạy vòng
@@ -562,6 +625,7 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
     const finalSignature = plan.place_ids.map(String).join(',');
     if (finalSignature !== signature && seen.has(finalSignature)) continue;
     seen.add(finalSignature);
+    plan.place_ids.forEach((id) => otherOptionIds.add(String(id)));
     options.push({
       key: strategy.key,
       label: strategy.label,

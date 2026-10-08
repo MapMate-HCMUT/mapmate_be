@@ -69,7 +69,7 @@ const extractBudget = (lower) => {
   return isTotal ? { budget_total: amount } : { budget_per_person: amount };
 };
 
-const extractTime = (lower) => {
+export const extractTime = (lower) => {
   const clock = lower.match(/(\d{1,2})\s*(?::|h|giờ|g)\s*(\d{2})?\s*(sáng|trưa|chiều|tối|đêm)?/);
   if (clock && !/\d+\s*(tiếng|giờ đồng hồ)/.test(clock[0])) {
     let hour = Number(clock[1]);

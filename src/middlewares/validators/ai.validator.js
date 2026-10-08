@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AI_DEFAULT_TIER, AI_MAX_MUST_VISIT, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
+import { AI_DEFAULT_TIER, AI_MAX_MUST_VISIT, AI_RECENT_PLACES_MAX, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
 import { PEOPLE_FILTER } from '../../constants/places.js';
 import { objectId, objectIdList } from './common.validator.js';
 import { tripCriteriaSchema } from './itinerary.validator.js';
@@ -21,6 +21,7 @@ export const aiChatSchema = z.object({
     .object({
       criteria: tripCriteriaSchema.nullable().optional(),
       must_visit_ids: objectIdList(AI_MAX_MUST_VISIT).optional(),
+      recent_place_ids: objectIdList(AI_RECENT_PLACES_MAX).optional(), // nơi vừa gợi ý => lượt sau tránh lặp lại
       // Yêu cầu đang chờ (lượt trước hỏi lại / từ chối) — kiểm tra lại đúng schema của Agent hiểu yêu cầu
       pending: z.object({ kind: z.enum(Object.values(PENDING_KINDS)), interpretation: interpretationSchema }).nullable().optional(),
     })

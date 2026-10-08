@@ -14,6 +14,7 @@ const AVG_MINUTES_PER_STOP = 75;
 const MIN_STOPS = 2;
 const MAX_AUTO_STOPS = ITINERARY_MAX_STOPS; // đi cả ngày vẫn kịp bữa tối
 const EARLY_START = '08:00'; // xuất phát trước giờ này mới tính bữa sáng (đi lúc 9h thường đã ăn sáng ở nhà)
+const MAX_ACTIVITY_STREAK = 2;
 const MEAL_REQUIRED_HOURS = 5; // đi từ 5 tiếng trở lên (qua giờ ăn) mà không có bữa nào là vô lý — kể cả khi chỉ nói "đi chơi"
 const { MEAL, SNACK, DRINK, ACTIVITY } = VISIT_ROLES;
 
@@ -56,6 +57,7 @@ const simulateRoles = ({ count, startTime, durationHours = null, wants, meals, f
   const maxSnacks = foodTour ? MEAL_RULES.MAX_SNACKS_FOOD_TOUR : MEAL_RULES.MAX_SNACKS;
   let snacks = 0;
   let drinks = 0;
+  let activityStreak = 0; // số điểm vui chơi liền nhau gần nhất
 
   for (let index = 0; index < count; index += 1) {
     const previous = roles.at(-1);
@@ -66,11 +68,14 @@ const simulateRoles = ({ count, startTime, durationHours = null, wants, meals, f
     if (index > 0 && minutesNow >= endMinutes) break; // hết thời lượng người dùng muốn
     const drinkOk = wants.has(DRINK) && previous !== DRINK && drinks < MEAL_RULES.MAX_DRINKS;
     const activityOk = wants.has(ACTIVITY);
+    // Được ghép 2 điểm vui chơi liền nhau (VD bắn cung rồi dạo mall — planner chọn 2 kiểu khác nhau), không quá 2
+    const anotherActivityOk = activityOk && activityStreak < MAX_ACTIVITY_STREAK;
 
     let role = null;
     if (foodTour && snackOk) role = SNACK;
     else if (mealOk) role = MEAL;
     else if (activityOk && previous !== ACTIVITY) role = ACTIVITY;
+    else if (anotherActivityOk && previous === ACTIVITY && index < count - 1) role = ACTIVITY; // còn ít nhất 1 điểm sau để nghỉ chân / ăn uống
     else if (drinkOk && previous) role = DRINK; // không mở đầu bằng đồ uống khi còn lựa chọn khác
     else if (snackOk && previous === MEAL) role = SNACK; // tráng miệng sau bữa chính
     else if (activityOk) role = ACTIVITY;
@@ -79,6 +84,7 @@ const simulateRoles = ({ count, startTime, durationHours = null, wants, meals, f
     if (!role) break;
 
     roles.push(role);
+    activityStreak = role === ACTIVITY ? activityStreak + 1 : 0;
     if (role === MEAL) {
       lastMealAt = minutesNow;
       mealsLeft -= 1;
