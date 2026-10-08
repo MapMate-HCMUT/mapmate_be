@@ -57,6 +57,12 @@ const placeSchema = new mongoose.Schema(
       min: 0,
       max: 5,
     },
+    // Điểm do người dùng MapMate tự chấm khi đăng bài đánh giá (mỗi người tính 1 lần — lần chấm mới nhất).
+    // Tách riêng với rating / review_count lấy từ nguồn dữ liệu để người dùng biết điểm nào là của cộng đồng MapMate.
+    community_rating: {
+      average: { type: Number, default: 0, min: 0, max: 5 },
+      count: { type: Number, default: 0, min: 0 },
+    },
     price_range: {
       min: { type: Number, default: 0 },
       max: { type: Number, default: 0 },

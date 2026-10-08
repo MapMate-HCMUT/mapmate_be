@@ -12,6 +12,22 @@ const postSchema = new mongoose.Schema(
     place_id: { type: ObjectId, ref: 'Place', default: null },
     itinerary_id: { type: ObjectId, ref: 'Itinerary', default: null },
     rating: { type: Number, min: 1, max: 5, default: null }, // đánh giá của người đăng cho địa điểm
+    // Ảnh / video đính kèm (file nằm ở Cloudinary, ở đây chỉ lưu mã + thông số; link hiển thị dựng lúc trả về)
+    media: {
+      type: [
+        {
+          _id: false,
+          public_id: { type: String, required: true },
+          resource_type: { type: String, enum: ['image', 'video'], required: true },
+          cloud_name: { type: String, required: true },
+          width: Number,
+          height: Number,
+          duration: Number,
+          bytes: Number,
+        },
+      ],
+      default: [],
+    },
     visited: { type: Boolean, default: false }, // "Mình đã đến đây"
     tags: { type: [String], default: [] }, // hashtag, đã chuẩn hoá: viết thường, không có "#"
     tagged_user_ids: { type: [{ type: ObjectId, ref: 'User' }], default: [] },

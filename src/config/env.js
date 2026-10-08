@@ -17,6 +17,10 @@ export const env = {
   trustProxy: Number(process.env.TRUST_PROXY) || 0, // số tầng proxy phía trước (0 = chạy trực tiếp)
   corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()),
   // Groq (AI Planner). Không có key => AI Planner vẫn chạy bằng bộ hiểu câu dựa trên luật (chất lượng thấp hơn).
+  // Cloudinary (ảnh / video người dùng đăng kèm bài viết, đánh giá). Thiếu 1 trong 3 biến => tắt đính kèm ảnh / video.
+  cloudinary: process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET
+    ? { cloudName: process.env.CLOUDINARY_CLOUD_NAME, apiKey: process.env.CLOUDINARY_API_KEY, apiSecret: process.env.CLOUDINARY_API_SECRET }
+    : null,
   llm: {
     apiKey: process.env.GROQ_API_KEY || null,
     baseUrl: process.env.GROQ_BASE_URL || GROQ_DEFAULT_BASE_URL,
