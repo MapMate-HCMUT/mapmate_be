@@ -22,7 +22,7 @@ import { toUserCard, USER_CARD_SELECT } from '../utils/userCard.js';
 import { areFriends, getFriendIds } from './friend.service.js';
 import { ensureItineraryShareable, toItineraryView } from './itinerary.service.js';
 import { notifyUser } from './notification.service.js';
-import { deleteMedia, toMediaView, verifyPostMedia } from './media.service.js';
+import { attachMedia, deleteMedia, toMediaView, verifyPostMedia } from './media.service.js';
 import { toPlaceView } from './place.service.js';
 
 const DUPLICATE_KEY_ERROR = 11000;
@@ -153,6 +153,7 @@ export const createPost = async (userId, input) => {
     );
   }
 
+  await attachMedia(post._id, media);
   if (post.place_id && post.rating) await refreshCommunityRating(post.place_id);
 
   if (taggedIds.length > 0) {
