@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { EXPLORE_ERROR_CODES } from '../constants/errorCodes.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { NOTIFICATION_TYPES } from '../constants/notifications.js';
@@ -21,6 +22,7 @@ import { toUserCard, USER_CARD_SELECT } from '../utils/userCard.js';
 import { areFriends, getFriendIds } from './friend.service.js';
 import { ensureItineraryShareable, toItineraryView } from './itinerary.service.js';
 import { notifyUser } from './notification.service.js';
+import { deleteMedia, toMediaView, verifyPostMedia } from './media.service.js';
 import { toPlaceView } from './place.service.js';
 
 const DUPLICATE_KEY_ERROR = 11000;
@@ -47,6 +49,7 @@ const toPostView = (post, { viewerId, likedIds, repostedIds }) => ({
   type: post.type,
   content: post.content,
   rating: post.rating,
+  media: (post.media ?? []).map(toMediaView),
   visited: post.visited,
   tags: post.tags,
   visibility: post.visibility,
@@ -99,10 +102,25 @@ const getVisiblePost = async (postId, viewerId) => {
   return post;
 };
 
+// ── Điểm đánh giá của cộng đồng MapMate cho 1 địa điểm ──
+// Mỗi người tính 1 lần (lần chấm mới nhất), bỏ bài đăng lại. Tính lại mỗi khi có bài chấm điểm mới / bị xoá.
+const RATING_DECIMALS = 10;
+export const refreshCommunityRating = async (placeId) => {
+  const [row] = await Post.aggregate([
+    { $match: { place_id: new mongoose.Types.ObjectId(String(placeId)), rating: { $ne: null }, is_repost: { $ne: true } } },
+    { $sort: { created_at: -1 } },
+    { $group: { _id: '$author_id', rating: { $first: '$rating' } } },
+    { $group: { _id: null, average: { $avg: '$rating' }, count: { $sum: 1 } } },
+  ]);
+  const communityRating = { average: row ? Math.round(row.average * RATING_DECIMALS) / RATING_DECIMALS : 0, count: row?.count ?? 0 };
+  await Place.updateOne({ _id: placeId }, { $set: { community_rating: communityRating } });
+  return communityRating;
+};
+
 // ── Đăng bài ──
 
 export const createPost = async (userId, input) => {
-  const { type, content, place_id: placeId, itinerary_id: itineraryId, rating, visited, tags, tagged_user_ids: taggedIds, visibility } = input;
+  const { type, content, place_id: placeId, itinerary_id: itineraryId, rating, visited, tags, tagged_user_ids: taggedIds, visibility, media: mediaInput = [] } = input;
 
   if (type === POST_TYPES.PLACE && !(await Place.exists({ _id: placeId }))) {
     throw fail('Không tìm thấy địa điểm', HTTP_STATUS.NOT_FOUND, EXPLORE_ERROR_CODES.PLACE_NOT_FOUND);
@@ -116,8 +134,9 @@ export const createPost = async (userId, input) => {
     }
   }
 
+  const media = await verifyPostMedia(userId, mediaInput);
   const post = await Post.create({
-    author_id: userId, type, content, tags, visibility,
+    author_id: userId, type, content, tags, visibility, media,
     place_id: type === POST_TYPES.PLACE ? placeId : null,
     itinerary_id: type === POST_TYPES.ITINERARY ? itineraryId : null,
     rating: type === POST_TYPES.PLACE ? rating ?? null : null,
@@ -133,6 +152,8 @@ export const createPost = async (userId, input) => {
       { upsert: true },
     );
   }
+
+  if (post.place_id && post.rating) await refreshCommunityRating(post.place_id);
 
   if (taggedIds.length > 0) {
     const author = await User.findById(userId, { username: 1 }).lean();
@@ -187,7 +208,9 @@ export const deletePost = async (userId, postId) => {
     await Post.deleteMany({ repost_of: postId }); // xoá bài gốc => xoá luôn các bài đăng lại của nó
   }
   await PostLike.deleteMany({ post_id: postId });
+  if (post.place_id && post.rating) await refreshCommunityRating(post.place_id);
   trendingCache.clear();
+  await deleteMedia(post.media);
 };
 
 // ── Thích ──

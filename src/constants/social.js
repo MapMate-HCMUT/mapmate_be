@@ -18,6 +18,19 @@ export const POST_CONTENT_MAX_LENGTH = 1000;
 export const POST_MAX_TAGS = 8;
 export const POST_TAG_MAX_LENGTH = 30;
 export const POST_MAX_TAGGED_USERS = 10;
+
+// Ảnh / video đính kèm bài viết — lưu ở Cloudinary, trình duyệt tải thẳng lên (không đi qua server MapMate)
+export const POST_MEDIA = {
+  MAX_ITEMS: 6, // tối đa 6 ảnh / video mỗi bài
+  MAX_VIDEOS: 1,
+  FOLDER: 'mapmate/posts', // mỗi người 1 thư mục con: mapmate/posts/<userId>/...
+  IMAGE_MAX_BYTES: 10 * 1024 * 1024,
+  VIDEO_MAX_BYTES: 50 * 1024 * 1024,
+  VIDEO_MAX_SECONDS: 90,
+  FORMATS: { image: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif'], video: ['mp4', 'mov', 'webm', 'm4v'] },
+  REQUEST_TIMEOUT_MS: 10000,
+};
+export const MEDIA_TYPES = ['image', 'video'];
 export const SHARE_MAX_RECIPIENTS = 20;
 export const SHARE_MESSAGE_MAX_LENGTH = 200;
 export const PIN_NOTE_MAX_LENGTH = 300;

@@ -11,6 +11,8 @@ export const RATE_LIMITS = {
   ROUTE_COMPUTE: { WINDOW_MS: MINUTE_MS, MAX_REQUESTS: 40 },
   // Xe buýt / metro: trạm theo khung bản đồ, giờ xe tới trạm (tự làm mới 30 giây), tìm cách đi
   TRANSIT: { WINDOW_MS: MINUTE_MS, MAX_REQUESTS: 120 },
+  // Xin chữ ký tải ảnh / video lên Cloudinary (mỗi file 1 chữ ký; 1 bài tối đa 6 file)
+  MEDIA_UPLOAD: { WINDOW_MS: 10 * MINUTE_MS, MAX_REQUESTS: 60 },
   // Nhận dạng giọng nói (Groq Whisper, gói miễn phí 20 lượt/phút cho CẢ app)
   VOICE: { WINDOW_MS: 10 * MINUTE_MS, MAX_REQUESTS: 20 },
 };

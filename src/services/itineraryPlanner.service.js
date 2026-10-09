@@ -57,7 +57,9 @@ const isOpenForPlan = (place, time) => isOpenAt(planHours(place), time);
 // Người dùng gọi tên thì vẫn đi (điểm bắt buộc không qua bộ lọc này).
 const isCasualPick = (place) => !NOT_LEISURE_NAME.test(place.name ?? '') && (place.category !== 'shopping' || Boolean(place.kind) || LEISURE_SHOP_NAME.test(place.name ?? ''));
 
-const isUnrated = (place) => !(place.review_count > 0) && !(place.rating > 0);
+// Nơi nguồn dữ liệu chưa có điểm nhưng người dùng MapMate đã chấm => dùng điểm cộng đồng
+const effectiveRating = (place) => (place.review_count > 0 || place.rating > 0 ? place.rating : place.community_rating?.average ?? 0);
+const isUnrated = (place) => !(effectiveRating(place) > 0);
 
 const avgPrice = (place) => (place.price_range.min + place.price_range.max) / 2;
 
@@ -96,7 +98,7 @@ const buildScorer = (candidates, { tags, radiusKm, preferDistrict = null }) => {
 
   const features = (place) => ({
     price: 1 - avgPrice(place) / maxPrice,
-    rating: isUnrated(place) ? UNRATED_RATING_SCORE : Math.max(0, (place.rating - MIN_RATING_SCALE) / (MAX_RATING - MIN_RATING_SCALE)),
+    rating: isUnrated(place) ? UNRATED_RATING_SCORE : Math.max(0, (effectiveRating(place) - MIN_RATING_SCALE) / (MAX_RATING - MIN_RATING_SCALE)),
     popularity: Math.log10(1 + (place.review_count ?? 0)) / maxReviewLog,
     proximity: Math.max(0, 1 - place.distance_m / 1000 / radiusKm),
     style: tagSet.size ? (place.tags ?? []).filter((tag) => tagSet.has(tag)).length / tagSet.size : 0,

@@ -189,6 +189,7 @@ export const toPlaceView = (place, { pin, report } = {}) => {
     coordinates: { lng, lat },
     rating: place.rating,
     review_count: place.review_count ?? 0,
+    community_rating: { average: place.community_rating?.average ?? 0, count: place.community_rating?.count ?? 0 }, // đánh giá của người dùng MapMate
     price_range: place.price_range,
     tags: place.tags ?? [],
     specialties: place.specialties ?? [],
