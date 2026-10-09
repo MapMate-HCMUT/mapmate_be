@@ -45,7 +45,7 @@ const oldDuplicateNames = [
   'Phố Đi Bộ Bùi Viện Nightlife',
   'Chợ Đêm Ẩm Thực Hồ Thị Kỷ',
   'Phố Ốc Vĩnh Khánh Đêm Sài Gòn',
-  'Đường Sách Nguyễn Văn Bình',
+  'Đường Sách Nguyễn Văn Bình - Phố Sách Sài Gòn',
   'Katholic Cat Cafe Mèo Tân Định',
   'Chạng Vạng Rooftop Ngắm Landmark 81',
   'Hồ Con Rùa - Trà Sữa Bệt Sài Gòn',
