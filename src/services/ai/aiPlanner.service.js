@@ -8,7 +8,7 @@
 //   5. Truy vấn DB      (planner / search)  — lộ trình + địa điểm THẬT (+ dự báo thời tiết nếu đi trong 48 giờ)
 //   6. Tư vấn           (advisor.agent)     — Groq model người dùng chọn, chỉ được nói về dữ liệu ở bước 5
 // Groq lỗi / chưa có key ở bước nào => bước đó tự chuyển sang bản dự phòng (luật / mẫu), pipeline vẫn trả kết quả.
-import { AI_DEFAULT_TIER, AI_FIND_PLACES_LIMIT, AI_INTENTS, AI_TRIP_INTENTS, REQUEST_QUALITY } from '../../constants/ai.js';
+import { AI_DEFAULT_TIER, AI_FIND_PLACES_LIMIT, AI_INTENTS, AI_RECENT_PLACES_MAX, AI_RECENT_SUGGESTION_TURNS, AI_TRIP_INTENTS, REQUEST_QUALITY } from '../../constants/ai.js';
 import { ERROR_CODES, EXPLORE_ERROR_CODES } from '../../constants/errorCodes.js';
 import { HTTP_STATUS } from '../../constants/httpStatus.js';
 import { DEFAULT_PLACE_SORT } from '../../constants/places.js';
@@ -20,7 +20,7 @@ import { suggestItineraries } from '../itineraryPlanner.service.js';
 import { searchPlaces, toPlaceView } from '../place.service.js';
 import { buildClarifyReply, buildRefusalReply } from './adviceTemplates.js';
 import { adviseUser } from './advisor.agent.js';
-import { loadSession, persistSession, toHistory } from './aiSession.service.js';
+import { loadSession, persistSession, recentSuggestedIds, toHistory } from './aiSession.service.js';
 import { questionsFor } from './clarifyQuestions.js';
 import { buildCriteria, MEMORY_NOTE_PREFIX, tripMoment, vietnamNow } from './criteriaBuilder.js';
 import { checkFeasibility } from './feasibility.js';
@@ -59,11 +59,12 @@ const applyHints = (interpretation, hints) => {
   return { ...interpretation, intent, criteria };
 };
 
-const retrieve = async ({ intent, built }) => {
+const retrieve = async ({ intent, built, recentIds = [] }) => {
   const { criteria, mustInclude, exclude } = built;
   if (AI_TRIP_INTENTS.includes(intent)) {
     try {
-      const plan = await suggestItineraries(criteria, mustInclude.map((place) => place._id), { excludeIds: exclude.map((place) => place._id) });
+      // Bốc thăm lại mỗi lần + tránh nơi vừa gợi ý => hỏi lại là ra lộ trình khác
+      const plan = await suggestItineraries(criteria, mustInclude.map((place) => place._id), { excludeIds: exclude.map((place) => place._id), avoidIds: recentIds });
       return { options: plan.options, places: [], candidateCount: plan.candidate_count };
     } catch (error) {
       if (error.errorCode !== EXPLORE_ERROR_CODES.NO_MATCHING_PLACES) throw error;
@@ -131,6 +132,8 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
   const session = await loadSession(userId, sessionId);
   const previousCriteria = session?.criteria ?? context?.criteria ?? null;
   const previousMustVisitIds = (session ? session.must_visit_ids : context?.must_visit_ids) ?? [];
+  // Nơi vừa gợi ý ở các lượt trước (đã đăng nhập: lấy từ phiên; khách: giao diện gửi kèm)
+  const recentIds = session ? recentSuggestedIds(session, AI_RECENT_SUGGESTION_TURNS, AI_RECENT_PLACES_MAX) : context?.recent_place_ids ?? [];
   const pending = (session ? session.pending : context?.pending) ?? null;
   const askedBefore = pending?.kind === PENDING_KINDS.CLARIFY;
   const history = toHistory(session);
@@ -279,7 +282,7 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
     built.assumptions.push(...feasibility.notes);
 
     retrieved = await run('retrieve', AI_TRIP_INTENTS.includes(intent) ? 'Lên lộ trình từ dữ liệu thật' : 'Tìm địa điểm', async () => {
-      const result = await retrieve({ intent, built });
+      const result = await retrieve({ intent, built, recentIds });
       return { ...result, trace: { status: result.retrievalError ? 'empty' : 'ok', detail: { options: result.options.length, places: result.places.length, candidates: result.candidateCount ?? null } } };
     });
     if (retrieved.options.length && WEATHER_HINTS.includes(interpretation.criteria.date_hint)) {

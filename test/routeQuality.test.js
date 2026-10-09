@@ -97,3 +97,25 @@ describe('lời tư vấn', () => {
     assert.ok(buildTripTips({ criteria: { vehicle: 'walk', fill_duration: true }, option: early }).some((tip) => tip.includes('xong sớm')));
   });
 });
+
+describe('đa dạng lộ trình', () => {
+  it('nhận đúng kiểu + nhóm hoạt động để phối nhiều kiểu chơi', async () => {
+    const { activityGroupOf, activityTypeOf } = await import('../src/utils/activityType.js');
+    const archery = { name: 'Archery Tag Vietnam - Bắn Cung Đối Kháng', category: 'entertainment', kind: 'games' };
+    assert.equal(activityTypeOf(archery), 'archery');
+    assert.equal(activityGroupOf(archery), 'play');
+    assert.equal(activityGroupOf({ name: 'Vincom Center Đồng Khởi', category: 'shopping', kind: 'mall' }), 'shopping');
+    assert.equal(activityGroupOf({ name: 'Nhà thờ Đức Bà', category: 'attraction', kind: 'worship' }), 'sightseeing');
+    assert.equal(activityGroupOf({ name: 'Bưu điện Trung tâm Sài Gòn', category: 'attraction' }), 'sightseeing');
+    assert.equal(activityTypeOf({ name: 'Quán Cơm Gia Đình', category: 'food' }), 'food'); // "gia đình" không bị nhận nhầm là di tích
+  });
+
+  it('khuôn lộ trình cho ghép tối đa 2 điểm vui chơi liền nhau', async () => {
+    const { composeSlots } = await import('../src/services/tripComposer.js');
+    for (const criteria of [{ start_time: '14:00', duration_hours: 6 }, { start_time: '09:00', duration_hours: 10 }]) {
+      const roles = composeSlots({ criteria }).map((slot) => slot.role);
+      assert.ok(roles.some((role, index) => role === 'activity' && roles[index + 1] === 'activity'), roles.join(','));
+      assert.ok(!roles.some((role, index) => role === 'activity' && roles[index + 1] === 'activity' && roles[index + 2] === 'activity'), roles.join(','));
+    }
+  });
+});

@@ -24,12 +24,23 @@ export const toHistory = (session) =>
     }
   });
 
+// Các nơi đã gợi ý trong vài lượt gần nhất (để lượt sau đổi gió, không lặp lại)
+export const recentSuggestedIds = (session, turns, max) =>
+  [...new Set((session?.messages ?? []).filter((message) => message.role === 'model').slice(-turns).flatMap((message) => {
+    try {
+      return JSON.parse(message.content).suggested_place_ids ?? [];
+    } catch {
+      return [];
+    }
+  }))].slice(-max);
+
 // Phần trả lời được lưu để mở lại phiên vẫn thấy câu hỏi làm rõ / lời từ chối / thông tin địa điểm
 const toStoredMessage = (response) => ({
   reply: response.reply,
   intent: response.intent,
   option_keys: response.options.map((option) => option.key),
   place_ids: response.places.map((place) => String(place.id)),
+  suggested_place_ids: [...new Set(response.options.flatMap((option) => option.place_ids.map(String)))], // để lượt sau tránh gợi ý lại
   clarifying_questions: response.clarifying_questions,
   refusal: response.refusal,
   place_answer: response.place_answer && {

@@ -1,10 +1,10 @@
 // Agent 1 — Hiểu yêu cầu: câu tự do của người dùng -> ý định + tiêu chí có cấu trúc (interpretationSchema).
 // Dùng model nhanh (temperature 0). Lỗi / chưa có key => bộ hiểu câu theo luật (ruleInterpreter).
-import { AI_INTENTS, AI_INTERPRETER_TIER, AI_MAX_OUTPUT_TOKENS, AI_REASONING_EFFORT, AI_TEMPERATURE } from '../../constants/ai.js';
+import { AI_INTENTS, AI_INTERPRETER_TIER, AI_MAX_OUTPUT_TOKENS, AI_REASONING_EFFORT, AI_TEMPERATURE, REQUEST_QUALITY } from '../../constants/ai.js';
 import { EXPLORE_CATEGORIES, PLACE_TAGS } from '../../constants/places.js';
 import { interpretationSchema } from './aiSchemas.js';
 import { callStructured, isLlmConfigured } from './llmClient.js';
-import { extractDateHint, extractDuration, interpretWithRules } from './ruleInterpreter.js';
+import { extractDateHint, extractDuration, extractTime, interpretWithRules } from './ruleInterpreter.js';
 
 const vocabulary = (items) => items.map((item) => `${item.value} (${item.label})`).join(', ');
 
@@ -67,6 +67,13 @@ ${memoryText}
 // trong khi câu ghi rõ "mai" / "cuối tuần" => tin luật (đi chiều mai mà xếp lịch ngay tối nay là sai hẳn)
 const SAME_DAY_HINTS = ['now', 'today', 'tonight'];
 const FUTURE_HINTS = ['tomorrow', 'weekend'];
+// "Gợi ý lộ trình khác đi" khi đã có lộ trình => giữ nguyên yêu cầu cũ, chỉ đổi địa điểm (không hỏi lại "bạn muốn đi đâu")
+const ANOTHER_ROUTE = /(khác đi|cái khác|lộ trình khác|gợi ý khác|chỗ khác|nơi khác|đổi lộ trình|lộ trình mới|đổi gió|thử cái khác|đổi chỗ)/;
+const asAnotherRoute = (interpretation, lower, previousCriteria) => {
+  if (!previousCriteria || !ANOTHER_ROUTE.test(lower)) return interpretation;
+  return { ...interpretation, intent: AI_INTENTS.REFINE_TRIP, request_quality: REQUEST_QUALITY.OK };
+};
+
 const reconcileDateHint = (modelHint, ruleHint) => {
   if (ruleHint === 'unspecified') return modelHint;
   if (modelHint === 'unspecified' || (FUTURE_HINTS.includes(ruleHint) && SAME_DAY_HINTS.includes(modelHint))) return ruleHint;
@@ -79,7 +86,7 @@ const reconcileDateHint = (modelHint, ruleHint) => {
  */
 export const interpretRequest = async ({ text, flags, history, previousCriteria, nowLabel, askedBefore = false, memoryText = null }) => {
   const fallback = (error) => {
-    const interpretation = interpretWithRules(text, { previousCriteria, askedBefore });
+    const interpretation = asAnotherRoute(interpretWithRules(text, { previousCriteria, askedBefore }), text.toLowerCase(), previousCriteria);
     // Câu cố thao túng mà không có nhu cầu đi chơi rõ ràng => ngoài phạm vi
     if (flags.injection_suspected && interpretation.intent === AI_INTENTS.ASK_INFO) interpretation.intent = AI_INTENTS.OUT_OF_SCOPE;
     return { interpretation, source: 'rules', error: error?.message ?? null };
@@ -99,10 +106,12 @@ export const interpretRequest = async ({ text, flags, history, previousCriteria,
     });
     // Model đôi khi bỏ sót thời lượng / ngày nói rõ ("cả ngày", "3 tiếng", "chiều mai") => luật bắt lại,
     // không để hệ thống tự đoán 4 tiếng hay hiểu "chiều mai" thành "ngay bây giờ"
-    const interpretation = result.data;
     const lower = text.toLowerCase();
+    const interpretation = asAnotherRoute(result.data, lower, previousCriteria);
     interpretation.criteria.duration_hours ??= extractDuration(lower);
     interpretation.criteria.date_hint = reconcileDateHint(interpretation.criteria.date_hint, extractDateHint(lower));
+    // "chiều mai" mà model chỉ hiểu "mai" => lấy giờ theo buổi (bữa ăn thì để bước sau tự canh giờ ăn)
+    if (!interpretation.criteria.start_time && !interpretation.criteria.meals.length) interpretation.criteria.start_time = extractTime(lower);
     return { interpretation, source: 'llm', model: result.model, usage: result.usage, latencyMs: result.latencyMs };
   } catch (error) {
     return fallback(error);

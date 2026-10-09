@@ -21,7 +21,8 @@ export const AI_INTERPRETER_TIER = AI_MODEL_TIERS.FAST;
 export const AI_LLM_TIMEOUT_MS = 30000;
 export const AI_LLM_MAX_RETRIES = 1; // thử lại 1 lần khi Groq bận (429 / 5xx) hoặc output sai schema
 export const AI_LLM_RETRY_DELAY_MS = 1200;
-export const AI_TEMPERATURE = { interpreter: 0, advisor: 0.6 };
+// Hiểu yêu cầu phải chính xác (0). Lời tư vấn được phép đa dạng câu chữ (lộ trình đa dạng là do bộ xếp lộ trình bốc thăm, không phải LLM).
+export const AI_TEMPERATURE = { interpreter: 0, advisor: 0.8 };
 // gpt-oss là model suy luận: phần "nghĩ" cũng tính vào giới hạn token => để rộng, và giới hạn độ suy luận cho nhanh.
 export const AI_MAX_OUTPUT_TOKENS = { interpreter: 2500, advisor: 3500 };
 export const AI_REASONING_EFFORT = { interpreter: 'low', advisor: 'medium' };
@@ -65,6 +66,9 @@ export const AI_PLACE_ROLES = {
   AVOID: 'avoid', // "đừng đưa vào Bùi Viện"
 };
 export const AI_MAX_MUST_VISIT = 4;
+// Nhớ các nơi vừa gợi ý ở vài lượt gần nhất => lượt sau hạn chế lặp lại ("gợi ý khác đi")
+export const AI_RECENT_SUGGESTION_TURNS = 3;
+export const AI_RECENT_PLACES_MAX = 60;
 // Phương tiện người dùng hay nói: xe máy / ô tô / đi bộ / phương tiện công cộng
 export const AI_VEHICLE_VALUES = ['bike', 'car', 'walk', 'public'];
 export const AI_FIND_PLACES_LIMIT = 6;
