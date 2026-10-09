@@ -10,3 +10,7 @@ data/open/
 
 # Phản hồi thô API xe buýt khi nhập dữ liệu (npm run transit:import)
 data/transit/cache/
+
+# Tài liệu PDF kỹ thuật lưu cục bộ
+*.pdf
+docs/*.pdf
