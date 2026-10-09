@@ -23,13 +23,32 @@ export const POST_MAX_TAGGED_USERS = 10;
 export const POST_MEDIA = {
   MAX_ITEMS: 6, // tối đa 6 ảnh / video mỗi bài
   MAX_VIDEOS: 1,
-  FOLDER: 'mapmate/posts', // mỗi người 1 thư mục con: mapmate/posts/<userId>/...
+  // Mọi video MapMate nằm chung 1 thư mục, mọi ảnh chung 1 thư mục (Cloudinary → Media Library).
+  // Tên file = <id người đăng>_<mã ngẫu nhiên> => vẫn biết file của ai mà không cần thư mục riêng cho từng người.
+  FOLDERS: { image: 'mapmate/images', video: 'mapmate/videos' },
   IMAGE_MAX_BYTES: 10 * 1024 * 1024,
-  VIDEO_MAX_BYTES: 50 * 1024 * 1024,
+  VIDEO_MAX_BYTES: 100 * 1024 * 1024, // = mức tối đa 1 video của gói Cloudinary miễn phí
   VIDEO_MAX_SECONDS: 90,
   FORMATS: { image: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif'], video: ['mp4', 'mov', 'webm', 'm4v'] },
   REQUEST_TIMEOUT_MS: 10000,
+  // Mỗi người / ngày (theo giờ VN) — chặn 1 tài khoản đốt hết hạn mức Cloudinary của cả app
+  DAILY_FILES: 30, // ~5 bài có 6 ảnh
+  DAILY_VIDEOS: 5,
+  DAILY_BYTES: 500 * 1024 * 1024, // tổng dung lượng file đã đăng trong ngày
+  // File đã tải lên nhưng không đăng bài (đóng khung, bỏ dở) => tự xoá sau 6 giờ
+  ORPHAN_TTL_MS: 6 * 60 * 60 * 1000,
+  CLEANUP_INTERVAL_MS: 60 * 60 * 1000,
+  CLEANUP_FIRST_DELAY_MS: 60 * 1000, // lần dọn đầu tiên: 1 phút sau khi server chạy
+  CLEANUP_BATCH: 100,
 };
+
+// Cầu dao hạn mức Cloudinary của CẢ app (gói miễn phí 25 credit / tháng — xem /usage của Cloudinary)
+export const MEDIA_USAGE_GUARD = {
+  CHECK_TTL_MS: 15 * 60 * 1000, // hỏi Cloudinary tối đa 15 phút / lần
+  VIDEO_OFF_PERCENT: 80, // dùng ≥ 80% => tạm ngưng đăng video (video tốn hạn mức nhất)
+  ALL_OFF_PERCENT: 90, // dùng ≥ 90% => tạm ngưng mọi ảnh / video, để dành phần còn lại cho ảnh đã đăng hiển thị
+};
+export const MEDIA_UPLOAD_STATUS = { PENDING: 'pending', ATTACHED: 'attached', DELETED: 'deleted' };
 export const MEDIA_TYPES = ['image', 'video'];
 export const SHARE_MAX_RECIPIENTS = 20;
 export const SHARE_MESSAGE_MAX_LENGTH = 200;

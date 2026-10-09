@@ -32,6 +32,8 @@ export const EXPLORE_ERROR_CODES = {
   POST_NOT_FOUND: 'POST_NOT_FOUND',
   MEDIA_DISABLED: 'MEDIA_DISABLED', // server chưa cấu hình Cloudinary
   MEDIA_INVALID: 'MEDIA_INVALID', // ảnh / video không phải của người đăng, chưa tải xong hoặc vượt giới hạn
+  MEDIA_QUOTA: 'MEDIA_QUOTA', // hết lượt tải ảnh / video trong ngày
+  MEDIA_PAUSED: 'MEDIA_PAUSED', // hạn mức Cloudinary của app sắp hết => tạm ngưng tải lên
   POST_NOT_SHAREABLE: 'POST_NOT_SHAREABLE',
   FRIEND_REQUEST_NOT_FOUND: 'FRIEND_REQUEST_NOT_FOUND',
   ALREADY_FRIENDS: 'ALREADY_FRIENDS',
