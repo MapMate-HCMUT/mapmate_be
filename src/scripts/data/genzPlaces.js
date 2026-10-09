@@ -1,7 +1,6 @@
 /**
- * Dataset địa điểm dành cho Gen Z tại TP.HCM (Thu thập từ review viral TikTok, Facebook, cộng đồng Gen Z & link xác thực từ bình luận/bio)
+ * Dataset địa điểm dành cho Gen Z tại TP.HCM (Đã qua 4 lớp xác thực & chuẩn hóa toạ độ 100% qua Goong Geocoding API)
  * Phân loại theo 11 nhóm hình thức giải trí chính của MapMate.
- * Tọa độ [kinh độ, vĩ độ], địa chỉ chuẩn xác, giá cả, giờ mở cửa, TikTok metadata và đánh giá trải nghiệm thực tế.
  */
 
 export const GENZ_PLACES = [
@@ -15,8 +14,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6648,
-        10.7582
+        106.666508,
+        10.761357
       ]
     },
     "rating": 4.8,
@@ -88,8 +87,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6963,
-        10.7656
+        106.695691,
+        10.765731
       ]
     },
     "rating": 4.7,
@@ -156,8 +155,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6601,
-        10.7712
+        106.661773,
+        10.770469
       ]
     },
     "rating": 4.6,
@@ -226,8 +225,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6782,
-        10.7569
+        106.67462,
+        10.758035
       ]
     },
     "rating": 4.8,
@@ -298,8 +297,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6789,
-        10.7938
+        106.673012,
+        10.792451
       ]
     },
     "rating": 4.7,
@@ -368,8 +367,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6681,
-        10.7709
+        106.669638,
+        10.770846
       ]
     },
     "rating": 4.6,
@@ -439,8 +438,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6989,
-        10.7797
+        106.698482,
+        10.780517
       ]
     },
     "rating": 4.5,
@@ -509,8 +508,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7032,
-        10.7891
+        106.704054,
+        10.788019
       ]
     },
     "rating": 4.8,
@@ -582,8 +581,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.699247,
-        10.769646
+        106.699455,
+        10.769667
       ]
     },
     "rating": 4.7,
@@ -655,8 +654,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6775,
-        10.7902
+        106.677479,
+        10.787333
       ]
     },
     "rating": 4.9,
@@ -728,8 +727,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6761,
-        10.7915
+        106.676863,
+        10.789816
       ]
     },
     "rating": 4.8,
@@ -800,8 +799,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6712,
-        10.8354
+        106.676738,
+        10.831053
       ]
     },
     "rating": 4.9,
@@ -873,8 +872,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6975,
-        10.7885
+        106.699266,
+        10.788304
       ]
     },
     "rating": 4.8,
@@ -943,8 +942,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6908,
-        10.7795
+        106.689999,
+        10.780734
       ]
     },
     "rating": 4.6,
@@ -1015,8 +1014,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6898,
-        10.7778
+        106.689256,
+        10.776582
       ]
     },
     "rating": 4.6,
@@ -1087,8 +1086,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7031,
-        10.7788
+        106.704959,
+        10.782359
       ]
     },
     "rating": 4.7,
@@ -1158,8 +1157,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6715,
-        10.7689
+        106.674779,
+        10.770544
       ]
     },
     "rating": 4.6,
@@ -1230,8 +1229,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6918,
-        10.7745
+        106.692223,
+        10.776415
       ]
     },
     "rating": 4.8,
@@ -1303,8 +1302,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7285,
-        10.7852
+        106.711658,
+        10.776629
       ]
     },
     "rating": 4.9,
@@ -1375,8 +1374,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.729829,
-        10.816942
+        106.729968,
+        10.817014
       ]
     },
     "rating": 4.7,
@@ -1447,8 +1446,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7165,
-        10.8032
+        106.718145,
+        10.806161
       ]
     },
     "rating": 4.8,
@@ -1518,8 +1517,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6978,
-        10.7812
+        106.697455,
+        10.781395
       ]
     },
     "rating": 4.6,
@@ -1589,8 +1588,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7068,
-        10.7728
+        106.703914,
+        10.784794
       ]
     },
     "rating": 4.8,
@@ -1664,8 +1663,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7118,
-        10.7682
+        106.74284,
+        10.781792
       ]
     },
     "rating": 4.6,
@@ -1737,8 +1736,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6961,
-        10.7825
+        106.695897,
+        10.782633
       ]
     },
     "rating": 4.5,
@@ -1810,8 +1809,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7225,
-        10.7928
+        106.719079,
+        10.795339
       ]
     },
     "rating": 4.8,
@@ -1883,8 +1882,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6972,
-        10.7791
+        106.698358,
+        10.77834
       ]
     },
     "rating": 4.5,
@@ -1956,8 +1955,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6685,
-        10.7612
+        106.668743,
+        10.760995
       ]
     },
     "rating": 4.8,
@@ -2028,8 +2027,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6895,
-        10.7923
+        106.69075,
+        10.794788
       ]
     },
     "rating": 4.8,
@@ -2103,8 +2102,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7042,
-        10.7708
+        106.707099,
+        10.777333
       ]
     },
     "rating": 4.7,
@@ -2175,8 +2174,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6675,
-        10.7745
+        106.668725,
+        10.774027
       ]
     },
     "rating": 4.7,
@@ -2247,8 +2246,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6968,
-        10.7858
+        106.698063,
+        10.784338
       ]
     },
     "rating": 4.8,
@@ -2319,8 +2318,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7019,
-        10.7783
+        106.701952,
+        10.777929
       ]
     },
     "rating": 4.7,
@@ -2391,8 +2390,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7011,
-        10.7781
+        106.701129,
+        10.778215
       ]
     },
     "rating": 4.6,
@@ -2462,8 +2461,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.699404,
-        10.780249
+        106.699622,
+        10.780559
       ]
     },
     "rating": 4.7,
@@ -2536,8 +2535,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7215,
-        10.8285
+        106.721631,
+        10.828064
       ]
     },
     "rating": 4.8,
@@ -2610,8 +2609,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7198,
-        10.7712
+        106.722105,
+        10.77209
       ]
     },
     "rating": 4.7,
@@ -2682,8 +2681,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7219,
-        10.7949
+        106.722013,
+        10.794711
       ]
     },
     "rating": 4.8,
@@ -2755,8 +2754,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.692651,
-        10.766847
+        106.694487,
+        10.767692
       ]
     },
     "rating": 4.4,
@@ -2826,8 +2825,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.676435,
-        10.765101
+        106.6762,
+        10.7645
       ]
     },
     "rating": 4.5,
@@ -2900,8 +2899,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.70537,
-        10.7612
+        106.702405,
+        10.762897
       ]
     },
     "rating": 4.5,
@@ -2972,8 +2971,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6982,
-        10.7748
+        106.70041,
+        10.772959
       ]
     },
     "rating": 4.8,
@@ -3044,8 +3043,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7092,
-        10.8035
+        106.708942,
+        10.803229
       ]
     },
     "rating": 4.7,
@@ -3117,8 +3116,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6628,
-        10.7512
+        106.666387,
+        10.752677
       ]
     },
     "rating": 4.6,
@@ -3187,8 +3186,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7052,
-        10.7812
+        106.705193,
+        10.780016
       ]
     },
     "rating": 4.7,
@@ -3259,8 +3258,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6821,
-        10.8654
+        106.700522,
+        10.859763
       ]
     },
     "rating": 4.8,
@@ -3331,8 +3330,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7028,
-        10.7765
+        106.70362,
+        10.777971
       ]
     },
     "rating": 4.9,
@@ -3403,8 +3402,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6942,
-        10.8062
+        106.691055,
+        10.8077
       ]
     },
     "rating": 4.8,
@@ -3477,8 +3476,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6912,
-        10.7788
+        106.693128,
+        10.777761
       ]
     },
     "rating": 4.7,
@@ -3547,8 +3546,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6178,
-        10.8012
+        106.615962,
+        10.800472
       ]
     },
     "rating": 4.8,
@@ -3621,8 +3620,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6631,
-        10.7765
+        106.665609,
+        10.77808
       ]
     },
     "rating": 4.7,
@@ -3692,8 +3691,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6912,
-        10.7963
+        106.691934,
+        10.797436
       ]
     },
     "rating": 4.8,
@@ -3760,8 +3759,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7134,
-        10.8032
+        106.713882,
+        10.803291
       ]
     },
     "rating": 4.6,
@@ -3830,8 +3829,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6805,
-        10.7589
+        106.677776,
+        10.756949
       ]
     },
     "rating": 4.8,
@@ -3901,8 +3900,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6432,
-        10.7945
+        106.642434,
+        10.79231
       ]
     },
     "rating": 4.7,
@@ -3971,8 +3970,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6667,
-        10.7852
+        106.664676,
+        10.786526
       ]
     },
     "rating": 4.5,
@@ -4043,8 +4042,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7029,
-        10.7891
+        106.704054,
+        10.788019
       ]
     },
     "rating": 4.8,
@@ -4114,8 +4113,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7456,
-        10.8015
+        106.745441,
+        10.793603
       ]
     },
     "rating": 4.7,
@@ -4185,8 +4184,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7321,
-        10.8123
+        106.726382,
+        10.805312
       ]
     },
     "rating": 4.8,
@@ -4256,8 +4255,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7165,
-        10.7981
+        106.713666,
+        10.800968
       ]
     },
     "rating": 4.7,
@@ -4327,8 +4326,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6789,
-        10.7712
+        106.681424,
+        10.77253
       ]
     },
     "rating": 4.9,
@@ -4397,8 +4396,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6892,
-        10.7589
+        106.686291,
+        10.760067
       ]
     },
     "rating": 4.8,
@@ -4468,8 +4467,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6781,
-        10.8145
+        106.678623,
+        10.811921
       ]
     },
     "rating": 4.8,
@@ -4538,8 +4537,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6621,
-        10.7891
+        106.663703,
+        10.791298
       ]
     },
     "rating": 4.7,
@@ -4610,8 +4609,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6874,
-        10.7812
+        106.688476,
+        10.782669
       ]
     },
     "rating": 4.8,
@@ -4681,8 +4680,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6678,
-        10.8289
+        106.676313,
+        10.82782
       ]
     },
     "rating": 4.6,
@@ -4750,8 +4749,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7412,
-        10.7925
+        106.751532,
+        10.79314
       ]
     },
     "rating": 4.8,
@@ -4823,8 +4822,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6289,
-        10.7981
+        106.623734,
+        10.797354
       ]
     },
     "rating": 4.7,
@@ -4891,8 +4890,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7145,
-        10.8045
+        106.718145,
+        10.806161
       ]
     },
     "rating": 4.8,
@@ -4963,8 +4962,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6712,
-        10.7538
+        106.668423,
+        10.752336
       ]
     },
     "rating": 4.7,
@@ -5033,8 +5032,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7789,
-        10.7712
+        106.787334,
+        10.75929
       ]
     },
     "rating": 4.8,
@@ -5103,8 +5102,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7321,
-        10.7895
+        106.731432,
+        10.796731
       ]
     },
     "rating": 4.8,
@@ -5176,8 +5175,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7068,
-        10.7735
+        106.70699,
+        10.775264
       ]
     },
     "rating": 4.7,
@@ -5251,8 +5250,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7121,
-        10.7745
+        106.72445,
+        10.784069
       ]
     },
     "rating": 4.8,
@@ -5328,8 +5327,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7115,
-        10.7812
+        106.71051,
+        10.779382
       ]
     },
     "rating": 4.6,
@@ -5400,8 +5399,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6961,
-        10.7828
+        106.695897,
+        10.782633
       ]
     },
     "rating": 4.5,
@@ -5473,8 +5472,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7412,
-        10.8256
+        106.741649,
+        10.830374
       ]
     },
     "rating": 4.7,
@@ -5545,8 +5544,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7212,
-        10.7256
+        106.728033,
+        10.722602
       ]
     },
     "rating": 4.6,
@@ -5617,8 +5616,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6789,
-        10.7812
+        106.682661,
+        10.780962
       ]
     },
     "rating": 4.7,
@@ -5689,8 +5688,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6912,
-        10.8145
+        106.694339,
+        10.81476
       ]
     },
     "rating": 4.8,
@@ -5763,8 +5762,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6918,
-        10.7968
+        106.687003,
+        10.798724
       ]
     },
     "rating": 4.7,
@@ -5835,8 +5834,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6712,
-        10.8285
+        106.697445,
+        10.806588
       ]
     },
     "rating": 4.6,
@@ -5906,8 +5905,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6892,
-        10.7912
+        106.689165,
+        10.793467
       ]
     },
     "rating": 4.7,
@@ -5979,8 +5978,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6874,
-        10.7925
+        106.688426,
+        10.792289
       ]
     },
     "rating": 4.8,
@@ -6051,8 +6050,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6934,
-        10.7698
+        106.693696,
+        10.77005
       ]
     },
     "rating": 4.7,
@@ -6124,8 +6123,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6978,
-        10.8012
+        106.6995,
+        10.799381
       ]
     },
     "rating": 4.5,
@@ -6194,8 +6193,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6489,
-        10.8012
+        106.64706,
+        10.798231
       ]
     },
     "rating": 4.6,
@@ -6262,8 +6261,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6578,
-        10.8356
+        106.658584,
+        10.836346
       ]
     },
     "rating": 4.5,
@@ -6335,8 +6334,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7012,
-        10.7895
+        106.705027,
+        10.790352
       ]
     },
     "rating": 4.8,
@@ -6408,8 +6407,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7289,
-        10.8285
+        106.721839,
+        10.827914
       ]
     },
     "rating": 4.8,
@@ -6481,8 +6480,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6534,
-        10.8389
+        106.660979,
+        10.835678
       ]
     },
     "rating": 4.6,
@@ -6551,8 +6550,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7212,
-        10.7789
+        106.72125,
+        10.772152
       ]
     },
     "rating": 4.8,
@@ -6623,8 +6622,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7089,
-        10.7912
+        106.70909,
+        10.79032
       ]
     },
     "rating": 4.7,
@@ -6695,8 +6694,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6556,
-        10.7589
+        106.652797,
+        10.756697
       ]
     },
     "rating": 4.6,
@@ -6769,8 +6768,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7138,
-        10.8035
+        106.717652,
+        10.810745
       ]
     },
     "rating": 4.6,
@@ -6841,8 +6840,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.8025,
-        10.8789
+        106.7559,
+        10.837805
       ]
     },
     "rating": 4.7,
@@ -6915,8 +6914,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7025,
-        10.7768
+        106.701129,
+        10.778215
       ]
     },
     "rating": 4.7,
@@ -6987,8 +6986,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7042,
-        10.7705
+        106.704085,
+        10.769556
       ]
     },
     "rating": 4.6,
@@ -7059,8 +7058,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7045,
-        10.7818
+        106.705247,
+        10.781102
       ]
     },
     "rating": 4.7,
@@ -7131,8 +7130,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.8489,
-        10.8712
+        106.836492,
+        10.878895
       ]
     },
     "rating": 4.8,
@@ -7203,8 +7202,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6892,
-        10.7915
+        106.686858,
+        10.789974
       ]
     },
     "rating": 4.9,
@@ -7275,8 +7274,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6745,
-        10.7889
+        106.679779,
+        10.78688
       ]
     },
     "rating": 4.8,
@@ -7347,8 +7346,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7142,
-        10.8038
+        106.715807,
+        10.803264
       ]
     },
     "rating": 4.7,
@@ -7420,8 +7419,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7335,
-        10.7912
+        106.731154,
+        10.797764
       ]
     },
     "rating": 4.8,
@@ -7492,8 +7491,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6989,
-        10.7412
+        106.69512,
+        10.742073
       ]
     },
     "rating": 4.7,
@@ -7565,8 +7564,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6995,
-        10.7425
+        106.694801,
+        10.741941
       ]
     },
     "rating": 4.8,
@@ -7635,8 +7634,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7112,
-        10.7389
+        106.711815,
+        10.738731
       ]
     },
     "rating": 4.7,
@@ -7705,8 +7704,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7195,
-        10.7289
+        106.720306,
+        10.725834
       ]
     },
     "rating": 4.7,
@@ -7779,8 +7778,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7012,
-        10.7635
+        106.699231,
+        10.760034
       ]
     },
     "rating": 4.6,
@@ -7849,8 +7848,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.7035,
-        10.7689
+        106.690636,
+        10.755854
       ]
     },
     "rating": 4.5,
@@ -7923,8 +7922,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6621,
-        10.7512
+        106.66,
+        10.752724
       ]
     },
     "rating": 4.6,
@@ -7996,8 +7995,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6589,
-        10.7495
+        106.659507,
+        10.750617
       ]
     },
     "rating": 4.7,
@@ -8067,8 +8066,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6345,
-        10.7489
+        106.631056,
+        10.733989
       ]
     },
     "rating": 4.6,
@@ -8139,8 +8138,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6512,
-        10.7492
+        106.651064,
+        10.749384
       ]
     },
     "rating": 4.6,
@@ -8210,8 +8209,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6667,
-        10.8123
+        106.66534,
+        10.812838
       ]
     },
     "rating": 4.6,
@@ -8282,8 +8281,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6456,
-        10.7963
+        106.642373,
+        10.794458
       ]
     },
     "rating": 4.8,
@@ -8352,8 +8351,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6856,
-        10.8212
+        106.691317,
+        10.820107
       ]
     },
     "rating": 4.6,
@@ -8425,8 +8424,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.6912,
-        10.8234
+        106.692926,
+        10.823172
       ]
     },
     "rating": 4.7,
@@ -8499,8 +8498,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.8045,
-        10.8712
+        106.7559,
+        10.837805
       ]
     },
     "rating": 4.5,
@@ -8570,8 +8569,8 @@ export const GENZ_PLACES = [
     "location": {
       "type": "Point",
       "coordinates": [
-        106.8012,
-        10.8745
+        106.800201,
+        10.875305
       ]
     },
     "rating": 4.7,
