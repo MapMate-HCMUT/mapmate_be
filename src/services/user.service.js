@@ -1,4 +1,5 @@
 import { RESERVED_USERNAMES, USERNAME_CHANGE_COOLDOWN_DAYS } from '../constants/auth.js';
+import { USER_ROLES } from '../constants/business.js';
 import { ERROR_CODES, PROFILE_ERROR_CODES } from '../constants/errorCodes.js';
 import { NOTIFICATION_TYPES } from '../constants/notifications.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
@@ -30,6 +31,8 @@ export const toPublicProfile = (user, { isOwner = true } = {}) => {
     id: user._id,
     username: user.username,
     avatar_url: user.avatar_url ?? null,
+    cover_url: user.cover_url ?? null, // ảnh bìa hồ sơ (null = dải màu mặc định)
+    role: user.role ?? USER_ROLES.USER, // 'business' => giao diện có thêm trang quản lý cửa hàng
     level: levelInfo.level,
     level_title: levelInfo.title,
     created_at: user.created_at,

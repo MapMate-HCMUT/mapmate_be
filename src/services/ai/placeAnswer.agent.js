@@ -6,6 +6,7 @@ import { PLACE_INFO_SOURCES } from '../../constants/externalSources.js';
 import { DEFAULT_ORIGIN } from '../../constants/places.js';
 import { DEFAULT_VEHICLE } from '../../constants/transport.js';
 import { isOpenAt } from '../../utils/geo.js';
+import { DAY_KEYS, DAY_LABELS, describeToday, isOpenOnDay, localDayAndTime } from '../../utils/weeklyHours.js';
 import { formatVnd } from '../../utils/money.js';
 import { planLeg, resolveModes } from '../../utils/transport.js';
 import { getWeatherAt } from '../external/weather.service.js';
@@ -20,6 +21,11 @@ const pad = (value) => String(value).padStart(2, '0');
 
 const hoursFact = (place, nowTime) => {
   if (place.hours_known === false) return 'Giờ mở cửa: chưa rõ (nên gọi hỏi trước)';
+  if (place.weekly_hours) {
+    const { day } = localDayAndTime();
+    const week = DAY_KEYS.map((key) => `${DAY_LABELS[key]}: ${(place.weekly_hours[key] ?? []).map((range) => `${range.open}–${range.close}`).join(', ') || 'nghỉ'}`).join('; ');
+    return `Giờ mở cửa hôm nay: ${describeToday(place)} (${isOpenOnDay(place, day, nowTime) ? 'đang mở' : 'hiện đang đóng'}). Cả tuần — ${week}`;
+  }
   if (!place.opening_hours?.open) return 'Giờ mở cửa: mở cả ngày';
   const { open, close } = place.opening_hours;
   return `Giờ mở cửa: ${open}–${close} (${isOpenAt(place.opening_hours, nowTime) ? 'đang mở' : 'hiện đang đóng'})`;

@@ -88,7 +88,7 @@ const retrieve = async ({ intent, built, recentIds = [] }) => {
     limit: AI_FIND_PLACES_LIMIT,
     auto_relax: 'true', // không có quán khớp hết điều kiện => nới dần, ghi chú cho người dùng biết
   });
-  const found = await searchPlaces(filters);
+  const found = await searchPlaces(filters, null, { promote: false }); // AI giữ khách quan: không ưu tiên cửa hàng trả phí
   if (found.relaxed) built.assumptions.push(`Không có chỗ khớp hết điều kiện — đã tạm bỏ: ${found.relaxed.labels.join(', ')}`);
   const pinned = mustInclude.map((place) => toPlaceView(place)); // quán người dùng gọi tên => luôn đứng đầu
   const places = [...pinned, ...found.items.filter((item) => !pinned.some((place) => String(place.id) === String(item.id)))].slice(0, AI_FIND_PLACES_LIMIT);

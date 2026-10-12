@@ -64,6 +64,7 @@ const toPostView = (post, { viewerId, likedIds, repostedIds }) => ({
   reposted_by_me: repostedIds.has(String(post._id)),
   is_mine: Boolean(viewerId) && sameId(post.author_id?._id, viewerId),
   is_repost: Boolean(post.is_repost),
+  owner_reply: post.owner_reply?.text ? post.owner_reply : null, // phản hồi của chủ quán
   // Bài đăng lại: original = bài gốc (null nếu bài gốc đã bị xoá)
   original: post.is_repost && post.repost_of ? toPostView(post.repost_of, { viewerId, likedIds, repostedIds }) : null,
 });

@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { BCRYPT_ROUNDS, USERNAME_DB_MAX_LENGTH, USERNAME_MIN_LENGTH } from '../constants/auth.js';
+import { USER_ROLES, USER_ROLE_VALUES } from '../constants/business.js';
 
 const statsSchema = new mongoose.Schema(
   {
@@ -32,6 +33,9 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: false, select: false, default: null }, // không bao giờ trả về trừ khi .select('+password')
     google_id: { type: String, default: null, sparse: true },
     avatar_url: { type: String, default: null },
+    cover_url: { type: String, default: null }, // ảnh bìa hồ sơ (/api/users/:id/cover?v=...) — null = dải màu mặc định
+    // user = người dùng thường; business = chủ cửa hàng (có hồ sơ doanh nghiệp — collection businesses)
+    role: { type: String, enum: USER_ROLE_VALUES, default: USER_ROLES.USER },
     level: { type: Number, default: 1, min: 1 },
     xp: { type: Number, default: 0, min: 0 },
     stars: { type: Number, default: 0, min: 0 },

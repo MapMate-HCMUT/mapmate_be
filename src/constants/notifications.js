@@ -9,6 +9,8 @@ export const NOTIFICATION_TYPES = {
   POST_TAGGED: 'post_tagged',
   POST_REPOSTED: 'post_reposted',
   POST_SHARED: 'post_shared',
+  PROMOTION: 'promotion', // quán người dùng đã lưu có khuyến mãi mới
+  REVIEW_REPLY: 'review_reply', // chủ quán trả lời bài đánh giá của người dùng
 };
 
 export const NOTIFICATION_TTL_DAYS = 90; // tự xoá thông báo cũ hơn 90 ngày

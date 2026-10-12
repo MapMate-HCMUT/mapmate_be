@@ -7,6 +7,7 @@ export const PLACE_SOURCES = {
   OVERTURE: 'overture',
   OSM: 'osm',
   COMMUNITY: 'community', // người dùng đóng góp (sau này)
+  BUSINESS: 'business', // chủ cửa hàng tự đăng (tài khoản doanh nghiệp)
 };
 export const PLACE_SOURCE_VALUES = Object.values(PLACE_SOURCES);
 export const OPEN_DATA_SOURCES = [PLACE_SOURCES.OVERTURE, PLACE_SOURCES.OSM];

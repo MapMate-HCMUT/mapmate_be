@@ -34,6 +34,11 @@ const postSchema = new mongoose.Schema(
     visibility: { type: String, enum: Object.values(POST_VISIBILITY), default: POST_VISIBILITY.PUBLIC },
     repost_of: { type: ObjectId, ref: 'Post', default: null },
     is_repost: { type: Boolean, default: false }, // vẫn biết là bài đăng lại kể cả khi bài gốc đã bị xoá
+    // Chủ cửa hàng (tài khoản doanh nghiệp) trả lời bài đánh giá về quán của họ
+    owner_reply: {
+      type: { _id: false, text: { type: String, trim: true }, business_name: String, replied_at: Date },
+      default: undefined,
+    },
     like_count: { type: Number, default: 0, min: 0 },
     repost_count: { type: Number, default: 0, min: 0 },
   },

@@ -13,3 +13,7 @@ export { PostLike } from './postLike.model.js';
 export { PlacePin } from './placePin.model.js';
 export { PlaceReport } from './placeReport.model.js';
 export { MediaUpload } from './mediaUpload.model.js';
+export { Business } from './business.model.js';
+export { BusinessStat } from './businessStat.model.js';
+export { Promotion } from './promotion.model.js';
+export { VoucherClaim } from './voucherClaim.model.js';

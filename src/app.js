@@ -23,10 +23,10 @@ if (env.trustProxy) app.set('trust proxy', env.trustProxy);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: env.corsOrigins }));
 app.use('/places', express.static(path.join(__dirname, '../public/places')));
-// Route upload ảnh đại diện tự parse với giới hạn lớn hơn (xem user.routes.js).
-const AVATAR_UPLOAD_PATH = '/api/users/me/avatar';
+// Route upload ảnh đại diện / ảnh bìa tự parse với giới hạn lớn hơn (xem user.routes.js).
+const IMAGE_UPLOAD_PATHS = new Set(['/api/users/me/avatar', '/api/users/me/cover']);
 const jsonParser = express.json({ limit: JSON_BODY_LIMIT });
-app.use((req, res, next) => (req.path === AVATAR_UPLOAD_PATH ? next() : jsonParser(req, res, next)));
+app.use((req, res, next) => (IMAGE_UPLOAD_PATHS.has(req.path) ? next() : jsonParser(req, res, next)));
 app.use(sanitizeRequest);
 
 app.get('/api/health', (req, res) => {

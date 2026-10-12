@@ -1,16 +1,19 @@
 import express, { Router } from 'express';
-import { AVATAR_BODY_LIMIT } from '../constants/auth.js';
+import { AVATAR_BODY_LIMIT, COVER_BODY_LIMIT } from '../constants/auth.js';
 import {
   changePassword,
   checkUsername,
   deleteAvatar,
+  deleteCover,
   getAvatar,
+  getCover,
   getMe,
   getMyHistory,
   getUserById,
   reverseGeocode,
   updateMe,
   uploadAvatar,
+  uploadCover,
 } from '../controllers/user.controller.js';
 import { findUsers } from '../controllers/friend.controller.js';
 import { getUserPins } from '../controllers/pin.controller.js';
@@ -47,5 +50,14 @@ userRouter.put(
 );
 userRouter.delete('/me/avatar', requireAuth, deleteAvatar);
 userRouter.get('/:id/avatar', validate({ params: userIdParamSchema }), getAvatar);
+userRouter.put(
+  '/me/cover',
+  requireAuth,
+  express.json({ limit: COVER_BODY_LIMIT }), // ảnh bìa ngang lớn hơn ảnh đại diện
+  validate({ body: avatarUploadSchema }),
+  uploadCover,
+);
+userRouter.delete('/me/cover', requireAuth, deleteCover);
+userRouter.get('/:id/cover', validate({ params: userIdParamSchema }), getCover);
 userRouter.get('/:id/pins', validate({ params: userIdParamSchema }), getUserPins);
 userRouter.get('/:id', optionalAuth, validate({ params: userIdParamSchema }), getUserById);

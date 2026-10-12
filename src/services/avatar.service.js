@@ -1,11 +1,13 @@
-import { AVATAR_MAX_BYTES } from '../constants/auth.js';
+import { AVATAR_MAX_BYTES, COVER_MAX_BYTES } from '../constants/auth.js';
 import { ERROR_CODES, PROFILE_ERROR_CODES } from '../constants/errorCodes.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { UserAvatar } from '../models/userAvatar.model.js';
+import { UserCover } from '../models/userCover.model.js';
 import { User } from '../models/user.model.js';
 import { AppError } from '../utils/AppError.js';
 import { clearLeaderboardCache } from './leaderboard.service.js';
 
+// Ảnh hồ sơ người dùng tự tải lên (ảnh đại diện, ảnh bìa): lưu trong MongoDB, phục vụ qua /api/users/:id/<kind>.
 const DATA_URL_PATTERN = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/;
 
 // Kiểm tra "chữ ký" đầu file để chắc chắn đúng là ảnh, không tin vào mime client gửi lên.
@@ -17,43 +19,59 @@ const MAGIC_BYTES = {
 
 const invalidImage = (message) => new AppError(message, HTTP_STATUS.BAD_REQUEST, PROFILE_ERROR_CODES.INVALID_IMAGE);
 
-const parseImageDataUrl = (dataUrl) => {
+export const parseImageDataUrl = (dataUrl, maxBytes = AVATAR_MAX_BYTES) => {
   const match = DATA_URL_PATTERN.exec(dataUrl);
   if (!match) throw invalidImage('Ảnh phải là JPG, PNG hoặc WEBP');
   const [, mimeType, base64] = match;
   const data = Buffer.from(base64, 'base64');
-  if (data.length > AVATAR_MAX_BYTES) throw invalidImage(`Ảnh quá lớn (tối đa ${AVATAR_MAX_BYTES / 1024}KB)`);
+  if (data.length > maxBytes) throw invalidImage(`Ảnh quá lớn (tối đa ${Math.round(maxBytes / 1024)}KB)`);
   if (!MAGIC_BYTES[mimeType](data)) throw invalidImage('File không phải ảnh hợp lệ');
   return { mimeType, data };
 };
 
-const setAvatarUrl = async (userId, avatarUrl) => {
-  const user = await User.findByIdAndUpdate(userId, { $set: { avatar_url: avatarUrl } }, { returnDocument: 'after' }).lean();
+const IMAGE_KINDS = {
+  avatar: { Model: UserAvatar, field: 'avatar_url', maxBytes: AVATAR_MAX_BYTES, missing: 'Người dùng chưa có ảnh đại diện' },
+  cover: { Model: UserCover, field: 'cover_url', maxBytes: COVER_MAX_BYTES, missing: 'Người dùng chưa có ảnh bìa' },
+};
+
+const setImageUrl = async (userId, field, url) => {
+  const user = await User.findByIdAndUpdate(userId, { $set: { [field]: url } }, { returnDocument: 'after' }).lean();
   if (!user) throw new AppError('Không tìm thấy người dùng', HTTP_STATUS.NOT_FOUND, ERROR_CODES.USER_NOT_FOUND);
-  clearLeaderboardCache();
+  if (field === 'avatar_url') clearLeaderboardCache(); // bảng xếp hạng có hiện ảnh đại diện
   return user;
 };
 
-// PUT /api/users/me/avatar — lưu ảnh vào MongoDB, avatar_url có ?v= để trình duyệt cache lâu dài mà vẫn thấy ảnh mới.
-export const saveUploadedAvatar = async (userId, dataUrl) => {
-  const { mimeType, data } = parseImageDataUrl(dataUrl);
-  await UserAvatar.findOneAndUpdate(
+// URL có ?v= để trình duyệt cache lâu dài mà vẫn thấy ảnh mới.
+const saveImage = async (kind, userId, dataUrl) => {
+  const { Model, field, maxBytes } = IMAGE_KINDS[kind];
+  const { mimeType, data } = parseImageDataUrl(dataUrl, maxBytes);
+  await Model.findOneAndUpdate(
     { user_id: userId },
     { $set: { mime_type: mimeType, data, size: data.length, updated_at: new Date() } },
     { upsert: true },
   );
-  return setAvatarUrl(userId, `/api/users/${userId}/avatar?v=${Date.now()}`);
+  return setImageUrl(userId, field, `/api/users/${userId}/${kind}?v=${Date.now()}`);
 };
 
-// DELETE /api/users/me/avatar — quay về avatar chữ cái đầu.
-export const removeAvatar = async (userId) => {
-  await UserAvatar.deleteOne({ user_id: userId });
-  return setAvatarUrl(userId, null);
+const removeImage = async (kind, userId) => {
+  const { Model, field } = IMAGE_KINDS[kind];
+  await Model.deleteOne({ user_id: userId });
+  return setImageUrl(userId, field, null);
 };
 
-// GET /api/users/:id/avatar
-export const getAvatarFile = async (userId) => {
-  const avatar = await UserAvatar.findOne({ user_id: userId }, { mime_type: 1, data: 1 }).lean();
-  if (!avatar) throw new AppError('Người dùng chưa có ảnh đại diện', HTTP_STATUS.NOT_FOUND, ERROR_CODES.USER_NOT_FOUND);
-  return { mimeType: avatar.mime_type, data: Buffer.from(avatar.data.buffer ?? avatar.data) };
+const getImageFile = async (kind, userId) => {
+  const { Model, missing } = IMAGE_KINDS[kind];
+  const image = await Model.findOne({ user_id: userId }, { mime_type: 1, data: 1 }).lean();
+  if (!image) throw new AppError(missing, HTTP_STATUS.NOT_FOUND, ERROR_CODES.USER_NOT_FOUND);
+  return { mimeType: image.mime_type, data: Buffer.from(image.data.buffer ?? image.data) };
 };
+
+// PUT / DELETE /api/users/me/avatar, GET /api/users/:id/avatar — xoá => quay về avatar chữ cái đầu
+export const saveUploadedAvatar = (userId, dataUrl) => saveImage('avatar', userId, dataUrl);
+export const removeAvatar = (userId) => removeImage('avatar', userId);
+export const getAvatarFile = (userId) => getImageFile('avatar', userId);
+
+// PUT / DELETE /api/users/me/cover, GET /api/users/:id/cover — xoá => quay về dải màu mặc định
+export const saveUploadedCover = (userId, dataUrl) => saveImage('cover', userId, dataUrl);
+export const removeCover = (userId) => removeImage('cover', userId);
+export const getCoverFile = (userId) => getImageFile('cover', userId);
