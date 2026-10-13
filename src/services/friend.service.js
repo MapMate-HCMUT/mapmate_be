@@ -16,7 +16,7 @@ import { toUserCard, USER_CARD_FIELDS } from '../utils/userCard.js';
 import { notifyUser } from './notification.service.js';
 
 const DUPLICATE_KEY_ERROR = 11000;
-const FRIENDS_TAB_LINK = '/explore?tab=friends';
+const FRIENDS_TAB_LINK = '/profile?tab=friends';
 const { PENDING, ACCEPTED } = FRIENDSHIP_STATUS;
 
 const fail = (message, status, code) => new AppError(message, status, code);

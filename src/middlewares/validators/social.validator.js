@@ -17,8 +17,9 @@ import {
 import { cursorDate, hashtag, hashtagList, objectId, objectIdList } from './common.validator.js';
 
 const postContent = z.string('Nội dung phải là chuỗi ký tự').trim().max(POST_CONTENT_MAX_LENGTH, `Nội dung tối đa ${POST_CONTENT_MAX_LENGTH} ký tự`);
+const MEDIA_PURPOSES = ['post', 'business'];
 const starRating = z.coerce.number().int().min(1).max(5);
-const mediaItem = z.object({
+export const mediaItem = z.object({
   public_id: z.string().trim().min(1).max(200),
   resource_type: z.enum(MEDIA_TYPES, 'Loại tệp đính kèm không hợp lệ'),
 });
@@ -77,4 +78,8 @@ export const setPinSchema = z.object({
 export const pinListQuerySchema = z.object({ status: z.enum(Object.values(PIN_STATUS)).optional() });
 
 // POST /api/uploads/signature — xin chữ ký tải 1 ảnh / video lên Cloudinary
-export const uploadSignatureSchema = z.object({ resource_type: z.enum(MEDIA_TYPES, 'Chỉ tải được ảnh hoặc video') });
+export const uploadSignatureSchema = z.object({
+  resource_type: z.enum(MEDIA_TYPES, 'Chỉ tải được ảnh hoặc video'),
+  // business = ảnh / video cửa hàng của tài khoản doanh nghiệp (tính theo dung lượng của gói, không theo lượt mỗi ngày)
+  purpose: z.enum(MEDIA_PURPOSES, 'Mục đích tải lên không hợp lệ').default('post'),
+});

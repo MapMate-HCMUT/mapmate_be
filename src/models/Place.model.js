@@ -11,7 +11,15 @@ import {
   EXPERIENCE_SETTINGS,
 } from '../constants/places.js';
 import { PLACE_SOURCES, PLACE_SOURCE_VALUES } from '../constants/openData.js';
+import { BUSINESS_TIER_VALUES } from '../constants/business.js';
 import { normalizeSearchText } from '../utils/text.js';
+
+// 1 khung giờ "HH:mm"–"HH:mm"; mỗi ngày là 1 mảng khung (rỗng = nghỉ). Subdocument không mặc định => địa điểm khác không bị gắn lịch.
+const timeRangeSchema = new mongoose.Schema({ open: String, close: String }, { _id: false });
+const weeklyHoursSchema = new mongoose.Schema(
+  Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => [day, { type: [timeRangeSchema], default: [] }])),
+  { _id: false },
+);
 
 const placeSchema = new mongoose.Schema(
   {
@@ -102,6 +110,8 @@ const placeSchema = new mongoose.Schema(
       open: { type: String, default: null },
       close: { type: String, default: null },
     },
+    // Giờ mở cửa theo từng ngày (chủ quán tự nhập — utils/weeklyHours.js). Có lịch này thì opening_hours chỉ là khung đại diện.
+    weekly_hours: { type: weeklyHoursSchema, default: undefined },
     // Thời gian ở lại trung bình (phút) — dùng để xếp lịch trình
     avg_visit_minutes: {
       type: Number,
@@ -212,6 +222,46 @@ const placeSchema = new mongoose.Schema(
       closed: { type: Number, default: 0 },
       open: { type: Number, default: 0 },
     },
+
+    // ── Cửa hàng do chủ doanh nghiệp tự đăng (source = 'business') — xem services/business.service.js ──
+    business_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', default: null },
+    description: { type: String, default: null, trim: true },
+    // Ảnh / video chủ cửa hàng tải lên (file ở Cloudinary, ở đây chỉ lưu mã + thông số như bài viết)
+    gallery: {
+      type: [
+        {
+          _id: false,
+          public_id: { type: String, required: true },
+          resource_type: { type: String, enum: ['image', 'video'], required: true },
+          cloud_name: { type: String, required: true },
+          width: Number,
+          height: Number,
+          duration: Number,
+          bytes: Number,
+        },
+      ],
+      default: undefined,
+    },
+    // Thông báo nhanh của chủ quán, có hạn (VD "Hôm nay nghỉ", "Đóng cửa sớm 20h")
+    owner_notice: { type: { _id: false, text: String, until: Date }, default: undefined },
+    // Khuyến mãi chưa kết thúc (tối đa vài cái, xếp theo ngày bắt đầu) — chép từ collection promotions để danh sách địa điểm
+    // không phải tra thêm; lúc trả về chỉ lấy cái ĐANG chạy (khuyến mãi hẹn giờ tự hiện khi tới ngày, hết hạn tự ẩn)
+    promotions: {
+      type: [{ _id: false, id: mongoose.Schema.Types.ObjectId, kind: String, title: String, label: String, description: String, code: String, starts_at: Date, ends_at: Date }],
+      default: undefined,
+    },
+    // Quyền lợi theo gói, chép từ BUSINESS_TIER_PERKS mỗi khi đổi gói => xếp "Đề xuất" chỉ cần đọc 1 collection
+    promo: {
+      type: {
+        _id: false,
+        tier: { type: String, enum: BUSINESS_TIER_VALUES },
+        boost: { type: Number, default: 0 },
+        reach_m: { type: Number, default: 0 },
+        featured: { type: Boolean, default: false },
+        highlight: { type: Boolean, default: false },
+      },
+      default: undefined,
+    },
   },
   {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
@@ -232,6 +282,10 @@ placeSchema.index({ parent_place_id: 1 }, { sparse: true });
 
 // Lọc theo nguồn (VD chỉ lấy dữ liệu nhóm đã kiểm tra) + xếp "Phổ biến"
 placeSchema.index({ source: 1 });
+
+// Cửa hàng của 1 doanh nghiệp + mục "Nổi bật gần bạn"
+placeSchema.index({ business_id: 1 }, { partialFilterExpression: { business_id: { $type: 'objectId' } } });
+placeSchema.index({ 'promo.featured': 1 }, { partialFilterExpression: { 'promo.featured': true } });
 
 // Lọc & gợi ý theo tiêu chí Gen Z
 placeSchema.index({ genz_category: 1 });

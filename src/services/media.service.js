@@ -123,13 +123,16 @@ const UPLOAD_LIMITS = {
 // ngay sau khi tải lên (chạy nền). Link hiển thị dùng đúng các biến thể này nên phát được cả video 100MB.
 const VIDEO_EAGER = `${TRANSFORMS.video}/mp4|${TRANSFORMS.poster}/jpg`;
 
-/** Chữ ký cho 1 file: trình duyệt gửi kèm các tham số này khi tải lên Cloudinary. Ghi sổ + trừ lượt trong ngày. */
-export const createUploadSignature = async (userId, resourceType) => {
+/**
+ * Chữ ký cho 1 file: trình duyệt gửi kèm các tham số này khi tải lên Cloudinary. Ghi sổ + trừ lượt trong ngày.
+ * dailyQuota = false: ảnh / video cửa hàng của doanh nghiệp — giới hạn bằng dung lượng của gói thay vì lượt mỗi ngày.
+ */
+export const createUploadSignature = async (userId, resourceType, { dailyQuota = true } = {}) => {
   if (!isMediaEnabled()) throw mediaDisabled();
   const flags = usageFlags(await getUsedPercent());
   if (!flags.uploads) throw mediaPaused(PAUSED_REASONS.all);
   if (resourceType === 'video' && !flags.videos) throw mediaPaused(PAUSED_REASONS.video);
-  const problem = quotaProblem(await todayStats(userId), resourceType);
+  const problem = dailyQuota ? quotaProblem(await todayStats(userId), resourceType) : null;
   if (problem) throw mediaQuota(problem);
 
   const signed = buildUploadSignature(userId, resourceType);
@@ -167,15 +170,14 @@ const fetchResource = async (resourceType, publicId) => {
 };
 
 /**
- * Kiểm tra ảnh / video gửi kèm bài viết: đúng thư mục của người đăng, có thật trên Cloudinary, trong giới hạn.
+ * Kiểm tra ảnh / video MỚI: đúng thư mục của người đăng, server đã cấp chữ ký, có thật trên Cloudinary, trong giới hạn.
+ * Bài viết còn bị giới hạn số file mỗi bài + dung lượng mỗi ngày; bộ sưu tập cửa hàng do business.service kiểm tra theo gói.
  * @param {Array<{ public_id, resource_type }>} items
- * @returns {Promise<Array>} dữ liệu lưu vào bài viết
+ * @returns {Promise<Array>} dữ liệu lưu vào bài viết / cửa hàng
  */
-export const verifyPostMedia = async (userId, items = []) => {
+export const verifyNewMedia = async (userId, items = []) => {
   if (!items.length) return [];
   if (!isMediaEnabled()) throw mediaDisabled();
-  if (items.length > POST_MEDIA.MAX_ITEMS) throw mediaInvalid(`Mỗi bài tối đa ${POST_MEDIA.MAX_ITEMS} ảnh / video`);
-  if (items.filter((item) => item.resource_type === 'video').length > POST_MEDIA.MAX_VIDEOS) throw mediaInvalid(`Mỗi bài tối đa ${POST_MEDIA.MAX_VIDEOS} video`);
   if (items.some((item) => !item.public_id.startsWith(ownerPrefix(userId, item.resource_type)))) throw mediaInvalid('Ảnh / video không hợp lệ, bạn tải lại giúp mình nhé');
   // Phải là file server đã cấp chữ ký cho chính người này và chưa gắn vào bài nào (không dùng 1 file cho nhiều bài)
   const pending = await MediaUpload.countDocuments({ user_id: userId, public_id: { $in: items.map((item) => item.public_id) }, status: MEDIA_UPLOAD_STATUS.PENDING });
@@ -198,6 +200,14 @@ export const verifyPostMedia = async (userId, items = []) => {
       bytes: resource.bytes ?? null,
     };
   });
+  return verified;
+};
+
+export const verifyPostMedia = async (userId, items = []) => {
+  if (!items.length) return [];
+  if (items.length > POST_MEDIA.MAX_ITEMS) throw mediaInvalid(`Mỗi bài tối đa ${POST_MEDIA.MAX_ITEMS} ảnh / video`);
+  if (items.filter((item) => item.resource_type === 'video').length > POST_MEDIA.MAX_VIDEOS) throw mediaInvalid(`Mỗi bài tối đa ${POST_MEDIA.MAX_VIDEOS} video`);
+  const verified = await verifyNewMedia(userId, items);
   const today = await todayStats(userId);
   const adding = verified.reduce((sum, item) => sum + (item.bytes ?? 0), 0);
   if (today.bytes + adding > POST_MEDIA.DAILY_BYTES) {
@@ -212,6 +222,26 @@ export const attachMedia = async (postId, items = []) => {
   await MediaUpload.bulkWrite(items.map((item) => ({
     updateOne: { filter: { public_id: item.public_id }, update: { $set: { status: MEDIA_UPLOAD_STATUS.ATTACHED, post_id: postId, bytes: item.bytes } } },
   })));
+};
+
+// Lưu bộ sưu tập cửa hàng => đánh dấu file đã dùng, gắn với cửa hàng + doanh nghiệp (để tính dung lượng của gói)
+export const attachGalleryMedia = async (placeId, businessId, items = []) => {
+  if (!items.length) return;
+  await MediaUpload.bulkWrite(items.map((item) => ({
+    updateOne: {
+      filter: { public_id: item.public_id },
+      update: { $set: { status: MEDIA_UPLOAD_STATUS.ATTACHED, place_id: placeId, business_id: businessId, bytes: item.bytes } },
+    },
+  })));
+};
+
+// Tổng dung lượng ảnh / video đang lưu của 1 doanh nghiệp (file đã xoá không tính)
+export const getBusinessStorageUsed = async (businessId) => {
+  const [row] = await MediaUpload.aggregate([
+    { $match: { business_id: new mongoose.Types.ObjectId(String(businessId)), status: MEDIA_UPLOAD_STATUS.ATTACHED } },
+    { $group: { _id: null, bytes: { $sum: { $ifNull: ['$bytes', 0] } } } },
+  ]);
+  return row?.bytes ?? 0;
 };
 
 // Link hiển thị (không lưu link — dựng từ public_id, đổi kích thước / định dạng tuỳ chỗ dùng)

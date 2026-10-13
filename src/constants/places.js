@@ -70,7 +70,7 @@ export const PLACE_STATUS = {
 };
 export const PLACE_STATUS_VALUES = Object.values(PLACE_STATUS);
 // Ai đánh dấu đóng cửa: nguồn dữ liệu (biến mất khỏi Overture/OSM) hay cộng đồng báo. Nhập lại chỉ mở lại loại 'source'.
-export const CLOSED_BY = { SOURCE: 'source', COMMUNITY: 'community' };
+export const CLOSED_BY = { SOURCE: 'source', COMMUNITY: 'community', OWNER: 'owner' };
 
 // Báo đóng cửa: (số người báo "đã đóng" − số người báo "vẫn mở") trong 180 ngày gần nhất
 export const PLACE_REPORT_TYPES = { CLOSED: 'closed', OPEN: 'open' };

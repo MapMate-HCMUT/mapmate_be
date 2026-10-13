@@ -73,3 +73,16 @@ describe('chống quá tải hạn mức Cloudinary', () => {
     assert.deepEqual(usageFlags(95), { uploads: false, videos: false });
   });
 });
+
+describe('ảnh bìa hồ sơ', () => {
+  it('nhận ảnh lớn hơn giới hạn ảnh đại diện nhưng chặn ảnh quá giới hạn ảnh bìa', async () => {
+    const { parseImageDataUrl } = await import('../src/services/avatar.service.js');
+    const { AVATAR_MAX_BYTES, COVER_MAX_BYTES } = await import('../src/constants/auth.js');
+    const jpeg = (bytes) => `data:image/jpeg;base64,${Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(bytes - 3)]).toString('base64')}`;
+    const mid = jpeg(AVATAR_MAX_BYTES + 1024);
+    assert.throws(() => parseImageDataUrl(mid), /quá lớn/);
+    assert.equal(parseImageDataUrl(mid, COVER_MAX_BYTES).mimeType, 'image/jpeg');
+    assert.throws(() => parseImageDataUrl(jpeg(COVER_MAX_BYTES + 1), COVER_MAX_BYTES), /quá lớn/);
+    assert.throws(() => parseImageDataUrl('data:image/png;base64,AAAA', COVER_MAX_BYTES), /không phải ảnh/);
+  });
+});

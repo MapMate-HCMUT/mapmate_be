@@ -29,3 +29,6 @@ export const HOME_AREA_FIELD_MAX_LENGTH = 100;
 export const AVATAR_MAX_BYTES = 256 * 1024;
 export const AVATAR_BODY_LIMIT = '400kb'; // base64 làm dữ liệu to thêm ~33%
 export const AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+// Ảnh bìa hồ sơ (dải ngang phía sau ảnh đại diện) — trình duyệt đã cắt 4:1 và nén còn ~100–300KB
+export const COVER_MAX_BYTES = 700 * 1024;
+export const COVER_BODY_LIMIT = '1mb';

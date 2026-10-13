@@ -6,6 +6,7 @@ import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { TRANSPORT_MODES } from '../constants/transport.js';
 import { addMinutesToTime, haversineKm, isOpenAt, roundTo } from '../utils/geo.js';
+import { isOpenOnDay, localDayAndTime } from '../utils/weeklyHours.js';
 import { clampStayOverride, getStayRange } from '../utils/stayTime.js';
 import { insideVenueLeg, planLeg, resolveModes } from '../utils/transport.js';
 import { sameVenue, venueOf } from '../utils/venue.js';
@@ -52,7 +53,8 @@ const PREFER_DISTRICT_BONUS = 0.3;
 // Giờ dùng để XẾP lộ trình: chùa, nhà thờ, bảo tàng... chưa rõ giờ => coi như chỉ mở ban ngày
 const isDaytimeOnly = (place) => DAYTIME_ONLY.KINDS.includes(place.kind) || (place.category === 'attraction' && DAYTIME_ONLY.NAME.test(place.name ?? ''));
 const planHours = (place) => ((place.opening_hours?.open && place.opening_hours?.close) || !isDaytimeOnly(place) ? place.opening_hours : DAYTIME_ONLY.HOURS);
-const isOpenForPlan = (place, time) => isOpenAt(planHours(place), time);
+// Quán có lịch theo ngày => xét đúng ngày đi (hôm nay, giờ VN): nghỉ hôm nay / nghỉ trưa thì không xếp vào khung đó
+const isOpenForPlan = (place, time) => (place.weekly_hours ? isOpenOnDay(place, localDayAndTime().day, time) : isOpenAt(planHours(place), time));
 
 // Điểm hệ thống được TỰ chọn cho 1 chuyến đi chơi: bỏ sân tập, coworking, cửa hàng chưa rõ loại (điện máy, ô tô...).
 // Người dùng gọi tên thì vẫn đi (điểm bắt buộc không qua bộ lọc này).

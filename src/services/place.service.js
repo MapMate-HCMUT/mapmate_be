@@ -37,6 +37,10 @@ import { createMemoryCache } from '../utils/memoryCache.js';
 import { getMyReportMap } from './placeReport.service.js';
 import { escapeRegExp, normalizeSearchText } from '../utils/text.js';
 import { isMall } from '../utils/venue.js';
+import { hoursView } from '../utils/weeklyHours.js';
+import { BUSINESS_DEFAULT_TIER } from '../constants/business.js';
+import { recordImpressions } from './businessStats.service.js';
+import { toMediaView } from './media.service.js';
 
 const METERS_PER_KM = 1000;
 const DISTRICT_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -50,7 +54,16 @@ const SORT_STAGES = {
   tiktok_trend: { 'tiktok_metadata.trend_score': -1, review_count: -1 },
 };
 
-// Điểm "Đề xuất" (constants/places.js): đã có đánh giá + biết giờ mở cửa + độ tin cậy + gần.
+// Cửa hàng gói trả phí được ưu tiên khi người tìm ở trong bán kính của gói (constants/business.js) — có nhãn "Tài trợ"
+const IS_PROMOTED = {
+  $and: [
+    { $gt: [{ $ifNull: ['$promo.boost', 0] }, 0] },
+    { $lte: ['$distance_m', { $ifNull: ['$promo.reach_m', 0] }] },
+    { $ne: ['$status', PLACE_STATUS.MAYBE_CLOSED] },
+  ],
+};
+
+// Điểm "Đề xuất" (constants/places.js): đã có đánh giá + biết giờ mở cửa + độ tin cậy + gần (+ ưu tiên của gói doanh nghiệp).
 const buildRecommendedRank = (radiusKm) => {
   const weights = RECOMMENDED_SORT_WEIGHTS;
   return {
@@ -61,11 +74,14 @@ const buildRecommendedRank = (radiusKm) => {
       { $multiply: [{ $max: [0, { $subtract: [1, { $divide: ['$distance_m', radiusKm * METERS_PER_KM] }] }] }, weights.proximity] },
       { $cond: [{ $eq: ['$status', PLACE_STATUS.MAYBE_CLOSED] }, weights.maybeClosed, 0] },
       { $multiply: [{ $ifNull: ['$tiktok_metadata.trend_score', 0] }, 0.005] },
+      { $cond: ['$_promoted', '$promo.boost', 0] },
     ],
   };
 };
-const sortStages = (sort, radiusKm) => {
-  if (sort === 'recommended') return [{ $addFields: { _rank: buildRecommendedRank(radiusKm) } }, { $sort: { _rank: -1 } }];
+const sortStages = (sort, radiusKm, promote = true) => {
+  if (sort === 'recommended') {
+    return [{ $addFields: { _promoted: promote ? IS_PROMOTED : false } }, { $addFields: { _rank: buildRecommendedRank(radiusKm) } }, { $sort: { _rank: -1 } }];
+  }
   return SORT_STAGES[sort] ? [{ $sort: SORT_STAGES[sort] }] : []; // 'distance': $geoNear đã xếp theo khoảng cách
 };
 
@@ -178,6 +194,23 @@ const buildNearbyPipeline = (filters) => {
   ];
 };
 
+// Có lịch theo ngày (chủ quán nhập) => opening_hours là khung của HÔM NAY (nghỉ hôm nay => null + closed_today)
+const hoursOf = (place) => {
+  const view = hoursView(place);
+  if (!view.weekly_hours) return { opening_hours: place.opening_hours?.open ? place.opening_hours : null, ...view };
+  const today = view.today_hours;
+  return { opening_hours: today.length ? { open: today[0].open, close: today.at(-1).close } : null, ...view };
+};
+
+const activeNotice = (notice, now = new Date()) => (notice?.text && new Date(notice.until) > now ? { text: notice.text, until: notice.until } : null);
+const activePromotion = (promotions = [], now = new Date()) => {
+  const running = promotions?.find((promo) => new Date(promo.starts_at) <= now && new Date(promo.ends_at) > now);
+  if (!running) return null;
+  const isHunt = running.kind && running.kind !== 'deal';
+  // Loại "săn voucher": không lộ mã chung — mỗi người tự nhận mã riêng trong trang Săn voucher
+  return { id: running.id, kind: running.kind ?? 'deal', title: running.title, label: running.label, description: running.description ?? null, code: isHunt ? null : running.code ?? null, starts_at: running.starts_at, ends_at: running.ends_at };
+};
+
 export const toPlaceView = (place, { pin, report } = {}) => {
   const [lng, lat] = place.location.coordinates;
   const view = {
@@ -193,7 +226,7 @@ export const toPlaceView = (place, { pin, report } = {}) => {
     price_range: place.price_range,
     tags: place.tags ?? [],
     specialties: place.specialties ?? [],
-    opening_hours: place.opening_hours?.open ? place.opening_hours : null,
+    ...hoursOf(place),
     hours_known: place.hours_known !== false, // false => opening_hours = null nghĩa là CHƯA RÕ, không phải mở cả ngày
     avg_visit_minutes: place.avg_visit_minutes,
     is_trending: Boolean(place.is_trending),
@@ -211,6 +244,14 @@ export const toPlaceView = (place, { pin, report } = {}) => {
     status: place.status ?? PLACE_STATUS.ACTIVE,
     report_counts: place.report_counts ?? { closed: 0, open: 0 },
     data_updated_at: place.cached_at ?? null, // lần cuối lấy từ nguồn (Overture / OSM làm mới hằng tháng)
+    description: place.description ?? null,
+    notice: activeNotice(place.owner_notice), // thông báo nhanh của chủ quán (còn hạn)
+    promotion: activePromotion(place.promotions), // khuyến mãi đang chạy
+    gallery: (place.gallery ?? []).map((item) => ({ public_id: item.public_id, ...toMediaView(item) })), // public_id: chủ quán sửa bộ sưu tập
+    // Cửa hàng do doanh nghiệp tự đăng: gói + được ưu tiên trong kết quả này không (để hiện nhãn "Tài trợ" minh bạch)
+    business: place.business_id
+      ? { tier: place.promo?.tier ?? BUSINESS_DEFAULT_TIER, highlight: Boolean(place.promo?.highlight), promoted: Boolean(place._promoted) }
+      : null,
   };
   if (place.distance_m !== undefined) view.distance_km = roundTo(place.distance_m / METERS_PER_KM, 2);
   if (pin !== undefined) view.my_pin = pin;
@@ -229,14 +270,14 @@ const viewerState = (userId, place, pinMap, reportMap) =>
   userId ? { pin: pinMap.get(String(place._id)) ?? null, report: reportMap.get(String(place._id)) ?? null } : {};
 
 // GET /api/places/nearby — tìm địa điểm theo bộ lọc, có phân trang và tổng số kết quả.
-const runSearch = async (filters, userId) => {
+const runSearch = async (filters, userId, { viewerKey, promote } = {}) => {
   const { sort, page, limit, vehicle, transport_modes: customModes, lat = DEFAULT_ORIGIN.lat, lng = DEFAULT_ORIGIN.lng } = filters;
   const modes = resolveModes(vehicle, customModes);
   const [result] = await Place.aggregate([
     ...buildNearbyPipeline(filters),
     {
       $facet: {
-        items: [...sortStages(sort, searchRadiusKm(filters)), { $skip: (page - 1) * limit }, { $limit: limit }],
+        items: [...sortStages(sort, searchRadiusKm(filters), promote), { $skip: (page - 1) * limit }, { $limit: limit }],
         total: [{ $limit: PLACE_COUNT_CAP + 1 }, { $count: 'count' }],
       },
     },
@@ -245,6 +286,7 @@ const runSearch = async (filters, userId) => {
   const counted = result.total[0]?.count ?? 0;
   const total = Math.min(counted, PLACE_COUNT_CAP);
   const placeIds = result.items.map((place) => place._id);
+  if (viewerKey) recordImpressions(result.items, viewerKey);
   const [pinMap, reportMap] = await Promise.all([getPinMap(userId, placeIds), getMyReportMap(userId, placeIds)]);
   const items = result.items.map((place) => {
     const leg = planLeg([lng, lat], place.location.coordinates, { modes });
@@ -264,7 +306,7 @@ const isActive = (value) => (Array.isArray(value) ? value.length > 0 : value != 
  * Nới dần bộ lọc cho tới khi có kết quả: chỉ bỏ những điều kiện ĐANG bật, theo thứ tự PLACE_RELAX_STEPS.
  * @returns {{ result, relaxed: { keys, labels, radius_km? } } | null} null = nới hết vẫn không có
  */
-const searchRelaxed = async (filters, userId) => {
+const searchRelaxed = async (filters, userId, options) => {
   const next = { ...filters };
   const relaxed = { keys: [], labels: [] };
   // Có từ khoá ("phở hòa") => người dùng tìm đúng quán đó: bỏ 1 lần mọi bộ lọc đang bật (như bấm "Đặt lại bộ lọc"),
@@ -279,17 +321,18 @@ const searchRelaxed = async (filters, userId) => {
     relaxed.keys.push(...step.keys);
     relaxed.labels.push(...(step.labels ?? [step.label]));
     if (widen) relaxed.radius_km = RADIUS_FILTER.max;
-    const result = await runSearch(next, userId);
+    const result = await runSearch(next, userId, options);
     if (result.total > 0) return { result, relaxed };
   }
   return null;
 };
 
 // GET /api/places/nearby — auto_relax: không có kết quả thì tự nới bộ lọc (người dùng khỏi phải bấm "Đặt lại bộ lọc")
-export const searchPlaces = async (filters, userId) => {
-  const result = await runSearch(filters, userId);
+// options.viewerKey: đếm lượt hiện của cửa hàng doanh nghiệp; options.promote = false: không ưu tiên gói trả phí (AI Planner)
+export const searchPlaces = async (filters, userId, options = {}) => {
+  const result = await runSearch(filters, userId, options);
   if (result.total > 0 || !filters.auto_relax || filters.page > 1) return { ...result, relaxed: null };
-  const found = await searchRelaxed(filters, userId);
+  const found = await searchRelaxed(filters, userId, options);
   return found ? { ...found.result, relaxed: found.relaxed } : { ...result, relaxed: null };
 };
 

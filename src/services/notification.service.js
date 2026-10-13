@@ -12,6 +12,12 @@ export const notifyUser = async (userId, { type, title, body = '', icon = '🔔'
   await Notification.create([{ user_id: userId, type, title, body, icon, link }], session ? { session } : {});
 };
 
+// Gửi cùng 1 thông báo cho nhiều người (VD quán có khuyến mãi => báo người đã lưu quán) — 1 lệnh ghi
+export const notifyUsers = async (userIds, { type, title, body = '', icon = '🔔', link = null }) => {
+  if (!userIds.length) return;
+  await Notification.insertMany(userIds.map((userId) => ({ user_id: userId, type, title, body, icon, link })), { ordered: false });
+};
+
 export const getUnreadCount = (userId) => Notification.countDocuments({ user_id: userId, read_at: null });
 
 // Phân trang cursor theo created_at, kèm số chưa đọc để cập nhật chấm đỏ trên chuông.

@@ -2,6 +2,7 @@
 // Chống "bịa": model chỉ nhận dữ liệu đã lọc; schema chỉ cho chọn option_key / place_id có trong lần này;
 // lỗi hoặc chưa có key => lời khuyên dựng theo mẫu (adviceTemplates) từ cùng dữ liệu.
 import { AI_MAX_OUTPUT_TOKENS, AI_REASONING_EFFORT, AI_TEMPERATURE } from '../../constants/ai.js';
+import { describeToday } from '../../utils/weeklyHours.js';
 import { EXPLORE_CATEGORIES } from '../../constants/places.js';
 import { MEAL_WINDOWS, VISIT_ROLE_LABELS } from '../../constants/tripRules.js';
 import { formatVnd } from '../../utils/money.js';
@@ -24,7 +25,7 @@ const placeFacts = (place) => ({
   category: CATEGORY_LABELS[place.category] ?? place.category,
   rating: place.review_count > 0 || place.rating > 0 ? place.rating : null, // null = chưa có đánh giá
   price_per_person: priceText(place),
-  opening_hours: place.hours_known === false ? 'chưa rõ' : place.opening_hours ? `${place.opening_hours.open}–${place.opening_hours.close}` : 'cả ngày',
+  opening_hours: place.hours_known === false ? 'chưa rõ' : place.weekly_hours ? describeToday(place) : place.opening_hours ? `${place.opening_hours.open}–${place.opening_hours.close}` : 'cả ngày',
   district: place.district || null,
   reported_closed: place.status && place.status !== 'active',
 });

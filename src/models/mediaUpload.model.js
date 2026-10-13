@@ -11,11 +11,15 @@ const mediaUploadSchema = new mongoose.Schema(
     status: { type: String, enum: Object.values(MEDIA_UPLOAD_STATUS), default: MEDIA_UPLOAD_STATUS.PENDING },
     bytes: { type: Number, default: null }, // biết sau khi kiểm tra với Cloudinary lúc đăng bài
     post_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Post', default: null },
+    // Ảnh / video trong bộ sưu tập của cửa hàng (tài khoản doanh nghiệp) — tính vào dung lượng của gói
+    place_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Place', default: null },
+    business_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', default: null },
   },
   { versionKey: false, collection: 'media_uploads', timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
 );
 
 mediaUploadSchema.index({ user_id: 1, created_at: -1 });
 mediaUploadSchema.index({ status: 1, created_at: 1 });
+mediaUploadSchema.index({ business_id: 1, status: 1 }, { partialFilterExpression: { business_id: { $type: 'objectId' } } });
 
 export const MediaUpload = mongoose.model('MediaUpload', mediaUploadSchema);

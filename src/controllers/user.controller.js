@@ -1,4 +1,4 @@
-import { getAvatarFile, removeAvatar, saveUploadedAvatar } from '../services/avatar.service.js';
+import { getAvatarFile, getCoverFile, removeAvatar, removeCover, saveUploadedAvatar, saveUploadedCover } from '../services/avatar.service.js';
 import { reverseGeocodeArea } from '../services/geo.service.js';
 import {
   changeMyPassword,
@@ -53,15 +53,28 @@ export const deleteAvatar = asyncHandler(async (req, res) => {
 });
 
 // Ảnh có URL kèm ?v=<thời điểm> nên cache vĩnh viễn được; đổi ảnh => URL mới.
-export const getAvatar = asyncHandler(async (req, res) => {
-  const { mimeType, data } = await getAvatarFile(req.validated.params.id);
+const sendImage = (res, { mimeType, data }) => {
   res.set({
     'Content-Type': mimeType,
     'Cache-Control': 'public, max-age=31536000, immutable',
     'Cross-Origin-Resource-Policy': 'cross-origin', // cho phép frontend khác domain hiển thị ảnh
   });
   return res.send(data);
+};
+
+export const getAvatar = asyncHandler(async (req, res) => sendImage(res, await getAvatarFile(req.validated.params.id)));
+
+export const uploadCover = asyncHandler(async (req, res) => {
+  const user = await saveUploadedCover(req.user.id, req.validated.body.image);
+  return sendSuccess(res, { message: 'Đã cập nhật ảnh bìa', data: { profile: toPublicProfile(user) } });
 });
+
+export const deleteCover = asyncHandler(async (req, res) => {
+  const user = await removeCover(req.user.id);
+  return sendSuccess(res, { message: 'Đã xoá ảnh bìa', data: { profile: toPublicProfile(user) } });
+});
+
+export const getCover = asyncHandler(async (req, res) => sendImage(res, await getCoverFile(req.validated.params.id)));
 
 export const reverseGeocode = asyncHandler(async (req, res) => {
   const data = await reverseGeocodeArea(req.validated.query);
