@@ -249,12 +249,13 @@ export const toMediaView = (media) => {
   const base = `${DELIVERY_BASE}/${media.cloud_name}/${media.resource_type}/upload`;
   if (media.resource_type === 'video') {
     return {
+      id: media.public_id, // để khung chỉnh sửa bài viết biết file nào giữ lại
       type: 'video', url: `${base}/${TRANSFORMS.video}/${media.public_id}.mp4`, poster_url: `${base}/${TRANSFORMS.poster}/${media.public_id}.jpg`,
       original_url: `${base}/${media.public_id}`, // bản gốc — dùng tạm khi bản đã nén chưa làm xong (vừa đăng xong)
       width: media.width, height: media.height, duration: media.duration,
     };
   }
-  return { type: 'image', url: `${base}/${TRANSFORMS.image}/${media.public_id}`, thumb_url: `${base}/${TRANSFORMS.thumb}/${media.public_id}`, width: media.width, height: media.height };
+  return { id: media.public_id, type: 'image', url: `${base}/${TRANSFORMS.image}/${media.public_id}`, thumb_url: `${base}/${TRANSFORMS.thumb}/${media.public_id}`, width: media.width, height: media.height };
 };
 
 // Xoá file trên Cloudinary khi xoá bài (không chặn việc xoá bài nếu Cloudinary lỗi)

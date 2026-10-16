@@ -41,6 +41,8 @@ const postSchema = new mongoose.Schema(
     },
     like_count: { type: Number, default: 0, min: 0 },
     repost_count: { type: Number, default: 0, min: 0 },
+    comment_count: { type: Number, default: 0, min: 0 }, // số bình luận (collection post_comments)
+    edited_at: { type: Date, default: null }, // lần chỉnh sửa gần nhất => hiện "đã chỉnh sửa"
   },
   { versionKey: false, collection: 'posts', timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
 );

@@ -9,6 +9,7 @@ export const NOTIFICATION_TYPES = {
   POST_TAGGED: 'post_tagged',
   POST_REPOSTED: 'post_reposted',
   POST_SHARED: 'post_shared',
+  POST_COMMENTED: 'post_commented', // có người bình luận bài viết của bạn
   PROMOTION: 'promotion', // quán người dùng đã lưu có khuyến mãi mới
   REVIEW_REPLY: 'review_reply', // chủ quán trả lời bài đánh giá của người dùng
 };

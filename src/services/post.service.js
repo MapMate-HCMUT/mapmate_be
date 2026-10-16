@@ -5,6 +5,7 @@ import { NOTIFICATION_TYPES } from '../constants/notifications.js';
 import {
   FEED_SCOPES,
   PIN_STATUS,
+  POST_MEDIA,
   POST_TYPES,
   POST_VISIBILITY,
   TRENDING_TAGS_CACHE_TTL_MS,
@@ -14,6 +15,7 @@ import {
 import Place from '../models/Place.model.js';
 import { PlacePin } from '../models/placePin.model.js';
 import { Post } from '../models/post.model.js';
+import { PostComment } from '../models/postComment.model.js';
 import { PostLike } from '../models/postLike.model.js';
 import { User } from '../models/user.model.js';
 import { AppError } from '../utils/AppError.js';
@@ -32,7 +34,7 @@ const trendingCache = createMemoryCache(TRENDING_TAGS_CACHE_TTL_MS);
 
 const fail = (message, status, code) => new AppError(message, status, code);
 const postNotFound = () => fail('Không tìm thấy bài viết', HTTP_STATUS.NOT_FOUND, EXPLORE_ERROR_CODES.POST_NOT_FOUND);
-const postLink = (postId) => `/explore?tab=feed&post=${postId}`;
+export const postLink = (postId) => `/explore?tab=feed&post=${postId}`;
 const sameId = (a, b) => String(a) === String(b);
 
 // Nạp kèm tác giả, địa điểm, lộ trình, người được gắn thẻ — và bài gốc nếu là bài đăng lại.
@@ -60,6 +62,8 @@ const toPostView = (post, { viewerId, likedIds, repostedIds }) => ({
   tagged_users: (post.tagged_user_ids ?? []).map(toUserCard),
   like_count: post.like_count,
   repost_count: post.repost_count,
+  comment_count: post.comment_count ?? 0,
+  edited_at: post.edited_at ?? null,
   liked_by_me: likedIds.has(String(post._id)),
   reposted_by_me: repostedIds.has(String(post._id)),
   is_mine: Boolean(viewerId) && sameId(post.author_id?._id, viewerId),
@@ -97,7 +101,7 @@ const canView = async (post, viewerId) => {
   return sameId(post.author_id, viewerId) || areFriends(post.author_id, viewerId);
 };
 
-const getVisiblePost = async (postId, viewerId) => {
+export const getVisiblePost = async (postId, viewerId) => {
   const post = await Post.findById(postId).lean();
   if (!post || !(await canView(post, viewerId))) throw postNotFound();
   return post;
@@ -201,6 +205,67 @@ export const undoRepost = async (userId, postId) => {
   if (removed) await Post.updateOne({ _id: postId, repost_count: { $gt: 0 } }, { $inc: { repost_count: -1 } });
 };
 
+// ── Chỉnh sửa (chỉ tác giả) ──
+// Sửa được: nội dung, hashtag, quyền xem, số sao + "đã đến đây" (bài địa điểm), ảnh / video. Không đổi loại bài / địa điểm / lộ trình.
+// Bài đăng lại: chỉ sửa lời bình. Ảnh / video: file cũ giữ nguyên, file mới phải là file vừa tải lên, file bị bỏ => xoá trên Cloudinary.
+export const updatePost = async (userId, postId, input) => {
+  const post = await Post.findOne({ _id: postId, author_id: userId }).lean();
+  if (!post) throw postNotFound();
+  const changes = {};
+  if (input.content !== undefined) changes.content = input.content;
+  let addedMedia = [];
+  let removedMedia = [];
+
+  if (!post.is_repost) {
+    if (input.tags !== undefined) changes.tags = input.tags;
+    if (input.visibility !== undefined && input.visibility !== post.visibility) {
+      if (post.type === POST_TYPES.ITINERARY) await ensureItineraryShareable(userId, post.itinerary_id, input.visibility);
+      // Đã có người đăng lại thì bài phải giữ công khai (bài đăng lại của họ đang trỏ tới bài này)
+      if (input.visibility !== PUBLIC && post.repost_count > 0) {
+        throw fail('Bài đã có người đăng lại nên phải giữ chế độ công khai', HTTP_STATUS.BAD_REQUEST, EXPLORE_ERROR_CODES.POST_NOT_SHAREABLE);
+      }
+      changes.visibility = input.visibility;
+    }
+    if (post.type === POST_TYPES.PLACE) {
+      if (input.rating !== undefined) changes.rating = input.rating;
+      if (input.visited !== undefined) changes.visited = input.visited;
+    }
+    if (input.media !== undefined) {
+      const kept = new Map((post.media ?? []).map((item) => [item.public_id, item]));
+      const fresh = input.media.filter((item) => !kept.has(item.public_id));
+      if (input.media.filter((item) => item.resource_type === 'video').length > POST_MEDIA.MAX_VIDEOS) {
+        throw fail(`Mỗi bài tối đa ${POST_MEDIA.MAX_VIDEOS} video`, HTTP_STATUS.UNPROCESSABLE_ENTITY, EXPLORE_ERROR_CODES.MEDIA_INVALID);
+      }
+      addedMedia = await verifyPostMedia(userId, fresh);
+      const added = new Map(addedMedia.map((item) => [item.public_id, item]));
+      changes.media = input.media.map((item) => kept.get(item.public_id) ?? added.get(item.public_id));
+      removedMedia = (post.media ?? []).filter((item) => !input.media.some((next) => next.public_id === item.public_id));
+    }
+    const content = changes.content ?? post.content;
+    const media = changes.media ?? post.media ?? [];
+    if (post.type === POST_TYPES.TEXT && !content && !media.length) {
+      throw fail('Bài viết cần có nội dung hoặc ảnh', HTTP_STATUS.UNPROCESSABLE_ENTITY, EXPLORE_ERROR_CODES.POST_EMPTY);
+    }
+  }
+
+  changes.edited_at = new Date();
+  await Post.updateOne({ _id: postId }, { $set: changes });
+  await attachMedia(post._id, addedMedia);
+  await deleteMedia(removedMedia);
+  if (post.type === POST_TYPES.PLACE && (changes.rating !== undefined || changes.visited)) {
+    if (changes.visited && !post.visited) {
+      await PlacePin.updateOne(
+        { user_id: userId, place_id: post.place_id },
+        { $set: { status: PIN_STATUS.VISITED, ...((changes.rating ?? post.rating) && { rating: changes.rating ?? post.rating }) }, $setOnInsert: { visited_on: new Date() } },
+        { upsert: true },
+      );
+    }
+    await refreshCommunityRating(post.place_id);
+  }
+  if (changes.tags || changes.visibility) trendingCache.clear();
+  return loadPostView(postId, userId);
+};
+
 export const deletePost = async (userId, postId) => {
   const post = await Post.findOneAndDelete({ _id: postId, author_id: userId });
   if (!post) throw postNotFound();
@@ -209,7 +274,7 @@ export const deletePost = async (userId, postId) => {
   } else {
     await Post.deleteMany({ repost_of: postId }); // xoá bài gốc => xoá luôn các bài đăng lại của nó
   }
-  await PostLike.deleteMany({ post_id: postId });
+  await Promise.all([PostLike.deleteMany({ post_id: postId }), PostComment.deleteMany({ post_id: postId })]);
   if (post.place_id && post.rating) await refreshCommunityRating(post.place_id);
   trendingCache.clear();
   await deleteMedia(post.media);
