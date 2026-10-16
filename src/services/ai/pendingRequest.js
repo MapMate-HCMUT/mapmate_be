@@ -3,7 +3,8 @@
 // Chỉ hỏi lại tối đa 1 lượt: đã hỏi rồi mà vẫn thiếu thì tự giả định và làm tiếp.
 import { AI_INTENTS, REQUEST_QUALITY } from '../../constants/ai.js';
 
-export const PENDING_KINDS = { CLARIFY: 'clarify', UNREALISTIC: 'unrealistic' };
+// confirm = Agent điều phối nhắc lại ý đã hiểu, chờ "đúng rồi"; edit_target = hỏi sửa điểm nào (lộ trình có 2 bữa chính...)
+export const PENDING_KINDS = { CLARIFY: 'clarify', UNREALISTIC: 'unrealistic', CONFIRM: 'confirm', EDIT_TARGET: 'edit_target' };
 
 // Câu mới sang chủ đề khác => bỏ yêu cầu đang chờ
 const NEW_TOPIC_INTENTS = new Set([AI_INTENTS.ASK_PLACE, AI_INTENTS.OUT_OF_SCOPE, AI_INTENTS.SMALLTALK]);
@@ -36,6 +37,8 @@ export const resolvePending = (pending, interpretation) => {
       refusal_reason: quality === REQUEST_QUALITY.OK ? null : interpretation.refusal_reason,
       criteria: mergeCriteria(previous.criteria, interpretation.criteria),
       places_mentioned: [...previous.places_mentioned, ...interpretation.places_mentioned].slice(0, 6),
+      edits: interpretation.edits?.length ? interpretation.edits : previous.edits ?? [],
+      reorder: Boolean(interpretation.reorder || previous.reorder),
     },
   };
 };

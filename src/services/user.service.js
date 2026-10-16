@@ -1,4 +1,5 @@
 import { RESERVED_USERNAMES, USERNAME_CHANGE_COOLDOWN_DAYS } from '../constants/auth.js';
+import { revokeSessions } from './session.service.js';
 import { USER_ROLES } from '../constants/business.js';
 import { ERROR_CODES, PROFILE_ERROR_CODES } from '../constants/errorCodes.js';
 import { NOTIFICATION_TYPES } from '../constants/notifications.js';
@@ -140,12 +141,15 @@ export const changeMyPassword = async (userId, { current_password: currentPasswo
   }
   user.password = newPassword; // pre('save') sẽ băm bcrypt
   await user.save();
+  // Đổi mật khẩu => đá mọi phiên khác ra (VD token bị lộ); thiết bị đang đổi nhận token mới
+  const token = await revokeSessions(userId);
   await notifyUser(userId, {
     type: NOTIFICATION_TYPES.SECURITY,
     icon: '🔐',
     title: 'Mật khẩu của bạn vừa được thay đổi',
     body: 'Nếu không phải bạn thực hiện, hãy đổi lại mật khẩu ngay.',
   });
+  return { token };
 };
 
 // GET /api/users/me/xp-history — phân trang kiểu cursor theo created_at (đi theo index { user_id, created_at: -1 }).

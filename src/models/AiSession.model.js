@@ -53,6 +53,10 @@ const aiSessionSchema = new mongoose.Schema(
     must_visit_ids: { type: [mongoose.Schema.Types.ObjectId], default: [] },
     // Yêu cầu đang chờ người dùng trả lời (hỏi lại / từ chối vì phi thực tế) — services/ai/pendingRequest.js
     pending: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Lộ trình đang chỉnh (Agent chỉnh sửa): lộ trình đã lưu / được chia sẻ người dùng đưa cho AI, hoặc bản vừa chỉnh
+    base_plan: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Các phương án lượt trước (key + điểm) — lượt sau "đổi quán ăn" là sửa phương án người dùng đang xem
+    last_options: { type: mongoose.Schema.Types.Mixed, default: null },
     last_intent: { type: String, default: null },
     model_tier: { type: String, default: null },
   },

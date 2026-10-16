@@ -31,6 +31,8 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     username: { type: String, required: true, trim: true, minlength: USERNAME_MIN_LENGTH, maxlength: USERNAME_DB_MAX_LENGTH },
     password: { type: String, required: false, select: false, default: null }, // không bao giờ trả về trừ khi .select('+password')
+    // "Phiên bản phiên đăng nhập" — ghi vào token; đổi mật khẩu / đăng xuất mọi thiết bị => tăng lên, token cũ hết hiệu lực ngay
+    token_version: { type: Number, default: 0, select: false },
     google_id: { type: String, default: null, sparse: true },
     avatar_url: { type: String, default: null },
     cover_url: { type: String, default: null }, // ảnh bìa hồ sơ (/api/users/:id/cover?v=...) — null = dải màu mặc định

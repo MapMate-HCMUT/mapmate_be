@@ -22,17 +22,17 @@ export const registerUser = async ({ email, password, username }) => {
     body: 'Khám phá bản đồ, check-in địa điểm và báo cáo điểm ngập để nhận XP nhé.',
     link: '/',
   });
-  return { userId: user._id, token: signAccessToken(user._id), user: toPublicProfile(user) };
+  return { userId: user._id, token: signAccessToken(user._id, user.token_version ?? 0), user: toPublicProfile(user) };
 };
 
 export const loginUser = async ({ email, password }) => {
-  const user = await User.findOne({ email }).select('+password');
+  const user = await User.findOne({ email }).select('+password +token_version');
   const isValid = user ? await user.comparePassword(password) : await bcrypt.compare(password, await dummyHashPromise);
 
   if (!user || !isValid) {
     throw new AppError('Email hoặc mật khẩu không đúng', HTTP_STATUS.UNAUTHORIZED, ERROR_CODES.INVALID_CREDENTIALS);
   }
-  return { token: signAccessToken(user._id), user: toPublicProfile(user) };
+  return { token: signAccessToken(user._id, user.token_version ?? 0), user: toPublicProfile(user) };
 };
 
 export const googleLoginUser = async ({ credential, email, name, picture, google_id }) => {
@@ -60,7 +60,7 @@ export const googleLoginUser = async ({ credential, email, name, picture, google
     throw new AppError('Không tìm thấy thông tin email từ tài khoản Google', HTTP_STATUS.BAD_REQUEST);
   }
 
-  let user = await User.findOne({ email: googleEmail.toLowerCase() });
+  let user = await User.findOne({ email: googleEmail.toLowerCase() }).select('+token_version');
   if (!user) {
     let baseUsername = (googleName || googleEmail.split('@')[0])
       .replace(/[^a-zA-Z0-9_]/g, '')
@@ -93,5 +93,5 @@ export const googleLoginUser = async ({ credential, email, name, picture, google
     }
   }
 
-  return { token: signAccessToken(user._id), user: toPublicProfile(user) };
+  return { token: signAccessToken(user._id, user.token_version ?? 0), user: toPublicProfile(user) };
 };

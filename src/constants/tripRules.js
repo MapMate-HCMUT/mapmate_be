@@ -45,6 +45,8 @@ export const MEAL_RULES = {
   // Tới sớm hơn giờ ăn hợp lý => chừa "thời gian tự do" tối đa 30 phút; lâu hơn thì ăn luôn + cảnh báo
   // (bắt người dùng chờ / lang thang cả tiếng chỉ để đúng giờ ăn là phí thời gian của họ)
   MAX_FREE_MINUTES: 30,
+  // ...trừ bữa người dùng NÓI RÕ ("ăn trưa ... rồi ăn tối"): chờ tới 90 phút còn hơn ăn tối lúc 14:30 rồi bị loại vì sát bữa trưa
+  MAX_FREE_BEFORE_NAMED_MEAL_MINUTES: 90,
   // ...trước đó ưu tiên ở lại điểm VUI CHƠI ngay trước lâu hơn, tối đa +45 phút so với bình thường
   MAX_EXTEND_ACTIVITY_MINUTES: 45,
 };
@@ -89,6 +91,6 @@ export const DAYTIME_ONLY = {
   HOURS: { open: '07:00', close: '17:00' },
 };
 // Sân tập thể thao, chỗ làm việc / học nhóm không phải chỗ đi chơi thông thường — chỉ chọn khi người dùng gọi đúng tên
-export const NOT_LEISURE_NAME = /(tennis|pickleball|gym|fitness|yoga|sân bóng|bóng đá|cầu lông|bóng rổ|golf|võ thuật|coworking|clb tiếng anh|câu lạc bộ tiếng anh)/i;
+export const NOT_LEISURE_NAME = /(tennis|pickleball|gym|fitness|yoga|sân bóng|bóng đá|cầu lông|bóng rổ|golf|võ thuật|coworking|clb tiếng anh|câu lạc bộ tiếng anh|office|for lease|cho thuê|văn phòng)/i;
 // Cửa hàng chưa rõ loại (điện máy, ô tô, tạp hoá...) không phải điểm "mua sắm dạo chơi" — chỉ lấy mall, chợ, nhà sách
 export const LEISURE_SHOP_NAME = /(vincom|aeon|lotte|giga ?mall|crescent|takashimaya|parkson|thiso|vivo ?city|estella|saigon centre|plaza|mall|trung tâm thương mại|chợ|nhà sách|hiệu sách|đường sách|book)/i;

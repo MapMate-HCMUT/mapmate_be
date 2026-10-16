@@ -23,8 +23,8 @@ export const updateMe = asyncHandler(async (req, res) => {
 });
 
 export const changePassword = asyncHandler(async (req, res) => {
-  await changeMyPassword(req.user.id, req.validated.body);
-  return sendSuccess(res, { message: 'Đổi mật khẩu thành công' });
+  const data = await changeMyPassword(req.user.id, req.validated.body);
+  return sendSuccess(res, { message: 'Đổi mật khẩu thành công', data });
 });
 
 export const getMyHistory = asyncHandler(async (req, res) => {

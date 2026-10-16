@@ -21,8 +21,8 @@ export const getAiOptions = asyncHandler(async (_req, res) =>
 );
 
 export const chat = asyncHandler(async (req, res) => {
-  const { message, session_id: sessionId, context, origin, model } = req.validated.body;
-  const data = await chatWithPlanner({ userId: req.user?.id ?? null, message, sessionId, context, origin, tier: model });
+  const { message, session_id: sessionId, context, origin, model, itinerary_id: itineraryId, selected_option_key: selectedOptionKey } = req.validated.body;
+  const data = await chatWithPlanner({ userId: req.user?.id ?? null, message, sessionId, context, origin, tier: model, itineraryId, selectedOptionKey });
   return sendSuccess(res, { data });
 });
 

@@ -1,16 +1,33 @@
 import { z } from 'zod';
-import { AI_DEFAULT_TIER, AI_MAX_MUST_VISIT, AI_RECENT_PLACES_MAX, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
+import { AI_BASE_PLAN_SOURCES, AI_DEFAULT_TIER, AI_MAX_MUST_VISIT, AI_RECENT_PLACES_MAX, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
+import { ITINERARY_MAX_STOPS } from '../../constants/social.js';
 import { PEOPLE_FILTER } from '../../constants/places.js';
-import { objectId, objectIdList } from './common.validator.js';
+import { objectId, objectIdList, timeOfDay } from './common.validator.js';
 import { tripCriteriaSchema } from './itinerary.validator.js';
 import { interpretationSchema } from '../../services/ai/aiSchemas.js';
 import { PENDING_KINDS } from '../../services/ai/pendingRequest.js';
-import { latitude, longitude, priceAmount } from './place.validator.js';
+import { customModeSchema, latitude, longitude, priceAmount, vehicleSchema } from './place.validator.js';
 
 // Người dùng gõ tự do; dài quá thì bộ lọc đầu vào tự cắt — ở đây chỉ chặn request bất thường (gấp đôi giới hạn).
 const message = z.string('Bạn hãy nhập yêu cầu').trim().min(1, 'Bạn hãy nhập yêu cầu').max(AI_PROMPT_MAX_LENGTH * 2, `Yêu cầu tối đa ${AI_PROMPT_MAX_LENGTH} ký tự`);
 const origin = z.object({ lat: latitude, lng: longitude, label: z.string().trim().max(120).optional() });
 const tier = z.enum(Object.values(AI_MODEL_TIERS), 'Chế độ AI không hợp lệ').default(AI_DEFAULT_TIER);
+
+// Lộ trình đang chỉnh (khách: giao diện gửi kèm phương án đang xem để AI sửa tiếp)
+const basePlanSchema = z.object({
+  source: z.enum(Object.values(AI_BASE_PLAN_SOURCES)),
+  itinerary_id: objectId('Lộ trình').nullable().optional(),
+  name: z.string().trim().max(120).default('Lộ trình'),
+  is_mine: z.boolean().default(false),
+  place_ids: objectIdList(ITINERARY_MAX_STOPS, 1),
+  stay_overrides: z.record(z.string().regex(/^[a-f\d]{24}$/i), z.number().int().min(5).max(600)).default({}),
+  vehicle: vehicleSchema,
+  transport_modes: z.array(customModeSchema).max(4).default([]),
+  people: z.number().int().min(PEOPLE_FILTER.min).max(PEOPLE_FILTER.max),
+  start_time: timeOfDay.nullable().optional(),
+  duration_hours: z.number().int().min(1).max(12).nullable().optional(),
+  origin,
+});
 
 // POST /api/ai/chat — Milestone 2: { message, sessionId, context }
 export const aiChatSchema = z.object({
@@ -23,12 +40,19 @@ export const aiChatSchema = z.object({
       must_visit_ids: objectIdList(AI_MAX_MUST_VISIT).optional(),
       recent_place_ids: objectIdList(AI_RECENT_PLACES_MAX).optional(), // nơi vừa gợi ý => lượt sau tránh lặp lại
       // Yêu cầu đang chờ (lượt trước hỏi lại / từ chối) — kiểm tra lại đúng schema của Agent hiểu yêu cầu
-      pending: z.object({ kind: z.enum(Object.values(PENDING_KINDS)), interpretation: interpretationSchema }).nullable().optional(),
+      pending: z
+        .object({ kind: z.enum(Object.values(PENDING_KINDS)), interpretation: interpretationSchema, edit_index: z.number().int().min(0).max(10).optional(), options: z.array(z.string().max(120)).max(4).optional() })
+        .nullable()
+        .optional(),
+      base_plan: basePlanSchema.nullable().optional(),
     })
     .nullable()
     .optional(),
   origin: origin.nullable().optional(),
   model: tier,
+  // Đưa 1 lộ trình đã lưu / được chia sẻ cho AI chỉnh (chỉ lộ trình người gửi được xem)
+  itinerary_id: objectId('Lộ trình').nullable().optional(),
+  selected_option_key: z.string().trim().max(40).nullable().optional(), // phương án đang xem ở lượt trước => "đổi quán ăn" là sửa phương án này
 });
 
 // POST /api/ai/recommend — Milestone 2: { message, location, budget, vehicle, people }

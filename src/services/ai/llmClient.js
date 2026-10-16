@@ -28,28 +28,64 @@ const MS_PER_SECOND = 1000;
 const MAX_RETRY_AFTER_MS = 8000; // chờ lâu hơn thì chuyển luôn sang bản dự phòng cho nhanh
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Ngân sách gọi Groq của CẢ server theo model (cửa sổ trượt 60 giây). Hết ngân sách => báo lỗi ngay để pipeline
-// dùng bản dự phòng, thay vì dồn thêm request vào Groq rồi nhận 429 (và chậm cho mọi người).
+// Ngân sách gọi Groq theo TỪNG key + model (cửa sổ trượt 60 giây) — có nhiều key (nhiều tài khoản) thì xoay vòng:
+// key nào vừa bị Groq báo 429 thì nghỉ tới khi Groq cho gọi lại, chuyển sang key khác. Hết key => báo lỗi ngay để
+// pipeline dùng bản dự phòng, thay vì dồn thêm request vào Groq rồi nhận 429 (và chậm cho mọi người).
 const MINUTE_MS = 60 * MS_PER_SECOND;
-const recentCalls = new Map(); // model -> [thời điểm gọi]
-export const acquireGroqSlot = (model) => {
-  const now = Date.now();
-  const calls = (recentCalls.get(model) ?? []).filter((time) => now - time < MINUTE_MS);
-  if (calls.length >= (GROQ_MODEL_RPM[model] ?? GROQ_MODEL_RPM.default)) {
-    recentCalls.set(model, calls);
-    throw new LlmError(`Groq đang quá tải (${model}) — tạm dùng chế độ dự phòng`, { status: 429 });
-  }
-  calls.push(now);
-  recentCalls.set(model, calls);
+const DEFAULT_COOLDOWN_MS = 20 * MS_PER_SECOND; // Groq không gửi retry-after => nghỉ 20 giây
+const keyUsage = new Map(); // `${keyIndex}|${model}` -> { calls: [thời điểm gọi], coolUntil }
+let nextKeyIndex = 0;
+const usageOf = (index, model) => {
+  const id = `${index}|${model}`;
+  if (!keyUsage.has(id)) keyUsage.set(id, { calls: [], coolUntil: 0 });
+  return keyUsage.get(id);
 };
 
-const requestCompletion = async (body, { timeoutMs = AI_LLM_TIMEOUT_MS } = {}) => {
-  acquireGroqSlot(body.model);
+/** Giữ 1 lượt gọi `model`: chọn key còn hạn mức (xoay vòng cho đều). @returns {{ key, index }} */
+export const acquireGroqSlot = (model, { exclude = new Set() } = {}) => {
+  const keys = env.llm.apiKeys;
+  const now = Date.now();
+  const limit = GROQ_MODEL_RPM[model] ?? GROQ_MODEL_RPM.default;
+  for (let step = 0; step < keys.length; step += 1) {
+    const index = (nextKeyIndex + step) % keys.length;
+    if (exclude.has(index)) continue;
+    const usage = usageOf(index, model);
+    usage.calls = usage.calls.filter((time) => now - time < MINUTE_MS);
+    if (usage.coolUntil > now || usage.calls.length >= limit) continue;
+    usage.calls.push(now);
+    nextKeyIndex = (index + 1) % keys.length;
+    return { key: keys[index], index };
+  }
+  throw new LlmError(`Groq đang quá tải (${model}) — tạm dùng chế độ dự phòng`, { status: 429 });
+};
+
+/** Groq báo key này hết hạn mức với `model` => nghỉ key đó (theo retry-after nếu có) */
+export const coolDownGroqKey = (index, model, retryAfterMs = null) => {
+  usageOf(index, model).coolUntil = Date.now() + Math.min(MINUTE_MS, retryAfterMs ?? DEFAULT_COOLDOWN_MS);
+};
+
+// 1 key bị 429 => thử ngay key khác (không tính là "thử lại"); hết key mới báo lỗi
+const requestCompletion = async (body, options = {}) => {
+  const tried = new Set();
+  for (;;) {
+    const slot = acquireGroqSlot(body.model, { exclude: tried });
+    try {
+      return await requestWithKey(body, slot.key, options);
+    } catch (error) {
+      if (!(error instanceof LlmError) || error.status !== 429) throw error;
+      coolDownGroqKey(slot.index, body.model, error.retryAfterMs);
+      tried.add(slot.index);
+      if (tried.size >= env.llm.apiKeys.length) throw error;
+    }
+  }
+};
+
+const requestWithKey = async (body, apiKey, { timeoutMs = AI_LLM_TIMEOUT_MS } = {}) => {
   let response;
   try {
     response = await fetch(`${env.llm.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.llm.apiKey}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
     });
@@ -102,9 +138,21 @@ const describeIssues = (issues) =>
 
 /**
  * Gọi 1 Agent và nhận về object đã kiểm tra theo `schema` (Zod).
+ * fallbackTier: model của tier này hết hạn mức (429) => thử model của tier dự phòng trước khi báo lỗi
+ * (VD model nhanh chỉ có 1.000 token đầu ra / phút — người dùng gõ liên tục là chạm giới hạn).
  * @returns {{ data, model, usage, latencyMs, attempts }}
  */
-export const callStructured = async ({ tier, system, messages, schema, schemaName, temperature, maxTokens, reasoningEffort }) => {
+export const callStructured = async ({ fallbackTier = null, ...input }) => {
+  try {
+    return await callStructuredOnce(input);
+  } catch (error) {
+    const canFallback = fallbackTier && error instanceof LlmError && error.status === 429 && resolveModelId(fallbackTier) !== resolveModelId(input.tier);
+    if (!canFallback) throw error;
+    return callStructuredOnce({ ...input, tier: fallbackTier });
+  }
+};
+
+const callStructuredOnce = async ({ tier, system, messages, schema, schemaName, temperature, maxTokens, reasoningEffort }) => {
   if (!isLlmConfigured()) throw new LlmError('Chưa cấu hình GROQ_API_KEY');
   const model = resolveModelId(tier);
   const startedAt = Date.now();

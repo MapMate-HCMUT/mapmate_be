@@ -32,7 +32,7 @@ const SQUASHED_RULES = [
 ];
 
 // Từ tục so trên chữ CÒN DẤU: bỏ dấu thì "lồn" = "lớn", "cặc" = "các", "đéo" = "đeo" => chặn nhầm câu bình thường
-const PROFANITY = /(^|[\s,.!?])(đm|đmm|địt|đéo|cặc|lồn|óc chó|thằng ngu|con ngu|ngu như bò|đồ ngu)($|[\s,.!?])/;
+const PROFANITY = /(^|[\s,.!?])(đm|đmm|địt|đéo|cặc|lồn|óc chó|thằng ngu|con ngu|ngu như bò|đồ ngu|cu)($|[\s,.!?])/;
 
 /** @returns {{ category, source: 'rules' } | null} */
 export const moderateByRules = (text) => {

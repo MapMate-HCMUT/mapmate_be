@@ -3,7 +3,8 @@
 // (2) kiểm tra lại output ở server (không tin tuyệt đối vào model).
 // Mọi trường đều "bắt buộc nhưng có thể null" (thay vì optional) để model luôn điền đủ khuôn.
 import { z } from 'zod';
-import { AI_INTENT_VALUES, AI_MAX_CLARIFYING_QUESTIONS, AI_PLACE_ROLES, AI_VEHICLE_VALUES, MISSING_INFO, PLACE_QUESTION_TOPICS, REQUEST_QUALITY } from '../../constants/ai.js';
+import { AI_EDIT_ACTIONS, AI_INTENT_VALUES, AI_MAX_CLARIFYING_QUESTIONS, AI_MAX_EDITS, AI_PLACE_ROLES, AI_VEHICLE_VALUES, MISSING_INFO, PLACE_QUESTION_TOPICS, REQUEST_QUALITY } from '../../constants/ai.js';
+import { ITINERARY_MAX_STOPS } from '../../constants/social.js';
 import { MEAL_VALUES, VISIT_ROLE_VALUES } from '../../constants/tripRules.js';
 import { EXPLORE_CATEGORIES, PLACE_TAG_VALUES } from '../../constants/places.js';
 import { PLACE_INFO_SOURCES } from '../../constants/externalSources.js';
@@ -13,6 +14,16 @@ const CATEGORY_VALUES = EXPLORE_CATEGORIES.map((category) => category.value);
 export const PRICE_LEVELS = ['cheap', 'moderate', 'upscale'];
 export const DATE_HINTS = ['now', 'today', 'tonight', 'tomorrow', 'weekend', 'unspecified'];
 const TIME_PATTERN = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
+
+// 1 thao tác sửa lộ trình: chỉ điểm bị sửa bằng số thứ tự / tên / vai trò; keyword + new_role = điểm mới muốn có
+const editSchema = z.object({
+  action: z.enum(AI_EDIT_ACTIONS),
+  stop_number: z.number().int().min(1).max(ITINERARY_MAX_STOPS).nullable(),
+  target_name: z.string().max(80).nullable(),
+  target_role: z.enum(VISIT_ROLE_VALUES).nullable(),
+  keyword: z.string().max(40).nullable(),
+  new_role: z.enum(VISIT_ROLE_VALUES).nullable(),
+});
 
 // ── Agent 1: hiểu yêu cầu ──
 export const interpretationSchema = z.object({
@@ -34,6 +45,7 @@ export const interpretationSchema = z.object({
     budget_total: z.number().int().min(0).max(200000000).nullable(), // đ cho cả nhóm (khi người dùng nói tổng)
     price_level: z.enum(PRICE_LEVELS).nullable(),
     start_time: z.string().regex(new RegExp(TIME_PATTERN)).nullable(), // "HH:mm" 24h
+    end_by: z.string().regex(new RegExp(TIME_PATTERN)).nullable(), // "về trước 22h" => "22:00" (giờ KẾT THÚC, không phải giờ đi)
     date_hint: z.enum(DATE_HINTS),
     duration_hours: z.number().int().min(1).max(12).nullable(),
     vehicle: z.enum(AI_VEHICLE_VALUES).nullable(),
@@ -53,6 +65,9 @@ export const interpretationSchema = z.object({
   places_mentioned: z
     .array(z.object({ name: z.string().max(80), role: z.enum(Object.values(AI_PLACE_ROLES)) }))
     .max(6),
+  // Sửa 1 lộ trình có sẵn (Agent chỉnh sửa): đổi / bỏ / thêm từng điểm thay vì lên lộ trình mới
+  edits: z.array(editSchema).max(AI_MAX_EDITS),
+  reorder: z.boolean(), // "sắp xếp lại cho đỡ chạy vòng"
 });
 
 // ── Agent 3: tư vấn ──

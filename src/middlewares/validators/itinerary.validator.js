@@ -36,6 +36,7 @@ export const tripCriteriaSchema = z.object({
   radius_km: radiusKm.default(RADIUS_FILTER.default),
   min_rating: ratingFloor.nullable().optional(),
   start_time: timeOfDay.default(DEFAULT_START_TIME),
+  end_by: timeOfDay.nullable().optional(), // AI Planner: "về trước 22h" => lộ trình phải kết thúc trước giờ này
   duration_hours: z.coerce.number(DURATION_MESSAGE).int(DURATION_MESSAGE).min(DURATION_FILTER.min, DURATION_MESSAGE).max(DURATION_FILTER.max, DURATION_MESSAGE).default(DURATION_FILTER.default),
   open_only: z.boolean().default(false),
   district: z.string().trim().max(60).nullable().optional(),
