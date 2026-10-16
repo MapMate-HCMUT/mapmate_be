@@ -23,8 +23,9 @@ export const AI_LLM_MAX_RETRIES = 1; // thử lại 1 lần khi Groq bận (429 
 export const AI_LLM_RETRY_DELAY_MS = 1200;
 // Hiểu yêu cầu phải chính xác (0). Lời tư vấn được phép đa dạng câu chữ (lộ trình đa dạng là do bộ xếp lộ trình bốc thăm, không phải LLM).
 export const AI_TEMPERATURE = { interpreter: 0, advisor: 0.8 };
-// gpt-oss là model suy luận: phần "nghĩ" cũng tính vào giới hạn token => để rộng, và giới hạn độ suy luận cho nhanh.
-export const AI_MAX_OUTPUT_TOKENS = { interpreter: 2500, advisor: 3500 };
+// gpt-oss là model suy luận: phần "nghĩ" cũng tính vào giới hạn token, nhưng Groq tính hạn mức phút theo (prompt + max_completion_tokens)
+// => đặt vừa đủ (đo thực tế: hiểu yêu cầu ~600–900, tư vấn ~700–1.200 token đầu ra) để gói free (8.000 token / phút) chạy được nhiều lượt hơn.
+export const AI_MAX_OUTPUT_TOKENS = { interpreter: 1600, advisor: 2000 };
 export const AI_REASONING_EFFORT = { interpreter: 'low', advisor: 'medium' };
 
 // Người dùng gõ gì cũng được (không bắt theo mẫu), chỉ giới hạn độ dài để chống lạm dụng.
@@ -81,6 +82,35 @@ export const AI_ERROR_CODES = {
   AI_MEMORY_NOT_FOUND: 'AI_MEMORY_NOT_FOUND',
   VOICE_UNSUPPORTED: 'VOICE_UNSUPPORTED',
   VOICE_EMPTY: 'VOICE_EMPTY',
+  AI_BASE_PLAN_EMPTY: 'AI_BASE_PLAN_EMPTY',
+};
+
+// ── Agent chỉnh sửa lộ trình (services/ai/editor.agent.js) ──
+// Lộ trình gốc để chỉnh: phương án AI vừa gợi ý, hoặc 1 lộ trình đã lưu (của mình / người khác chia sẻ)
+export const AI_BASE_PLAN_SOURCES = { OPTION: 'ai_option', ITINERARY: 'itinerary' };
+export const AI_EDIT_ACTIONS = ['add', 'remove', 'replace'];
+export const AI_MAX_EDITS = 4;
+export const AI_EDITED_OPTION_KEY = 'edited';
+export const AI_EDITOR = {
+  REPLACE_RADIUS_KM: 2, // điểm thay thế tìm quanh điểm cũ
+  ADD_RADIUS_KM: 3, // điểm thêm vào tìm quanh lộ trình
+  LOOKUP_LIMIT: 8,
+  CHEAPER_FACTOR: 0.8, // "rẻ hơn" => điểm mới rẻ hơn điểm cũ ít nhất 20%
+};
+
+// ── Agent kiểm tra lộ trình (services/ai/verifier.agent.js) ──
+export const AI_PLAN_CHECKS = {
+  ENDS_TOO_LATE: 'ENDS_TOO_LATE', // kết thúc sau giờ người dùng muốn về
+  CLOSED_ON_ARRIVAL: 'CLOSED_ON_ARRIVAL',
+  OVER_BUDGET: 'OVER_BUDGET',
+  LAST_TRANSIT: 'LAST_TRANSIT', // đi buýt / metro mà có chặng sau giờ xe nghỉ
+  NO_TRANSIT_ROUTE: 'NO_TRANSIT_ROUTE', // chọn buýt / metro nhưng chặng không có tuyến phù hợp
+  DIET_MISMATCH: 'DIET_MISMATCH',
+  MEAL_MISSING: 'MEAL_MISSING', // người dùng nói "ăn trưa ... rồi ăn tối" mà lộ trình thiếu bữa
+};
+export const AI_VERIFY = {
+  LAST_TRANSIT_TIME: '22:00', // sau giờ này xe buýt thưa / metro nghỉ
+  MAX_REPAIR_ROUNDS: 1, // sửa lại tối đa 1 vòng (mỗi vòng = 1 lần dựng lại lộ trình, không gọi LLM)
 };
 
 // Câu mẫu gợi ý trên giao diện

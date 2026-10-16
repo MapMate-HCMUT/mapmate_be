@@ -32,6 +32,12 @@ export const resolveModes = (vehicle = DEFAULT_VEHICLE, customModes = []) => {
 
 // ── Giá vé / cước (đ / người) ──
 
+/** Chuyến đi có dùng xe buýt / metro không (Công cộng, Xe buýt, Metro + Grab, Tuỳ chỉnh có buýt / metro) */
+export const usesPublicTransit = ({ vehicle, transport_modes: customModes }) => {
+  const modes = resolveModes(vehicle, customModes);
+  return modes.includes('bus') || modes.includes('metro');
+};
+
 export const getBusFare = (distanceKm, date = new Date()) => {
   const today = date.toISOString().slice(0, 10);
   const { fares } = BUS_FARE_PERIODS.find((period) => today >= period.from) ?? BUS_FARE_PERIODS.at(-1);

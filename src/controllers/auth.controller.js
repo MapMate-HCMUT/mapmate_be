@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from '../constants/httpStatus.js';
+import { revokeSessions } from '../services/session.service.js';
 import { googleLoginUser, loginUser, registerUser } from '../services/auth.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess } from '../utils/response.js';
@@ -16,4 +17,10 @@ export const login = asyncHandler(async (req, res) => {
 export const googleLogin = asyncHandler(async (req, res) => {
   const data = await googleLoginUser(req.body);
   return sendSuccess(res, { message: 'Đăng nhập Google thành công', data });
+});
+
+// Đăng xuất khỏi MỌI thiết bị (kể cả thiết bị này) — mọi token đã cấp hết hiệu lực
+export const logoutAll = asyncHandler(async (req, res) => {
+  await revokeSessions(req.user.id);
+  return sendSuccess(res, { message: 'Đã đăng xuất khỏi mọi thiết bị' });
 });

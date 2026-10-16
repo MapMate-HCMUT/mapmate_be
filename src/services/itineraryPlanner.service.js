@@ -13,6 +13,7 @@ import { sameVenue, venueOf } from '../utils/venue.js';
 import { normalizeSearchText } from '../utils/text.js';
 import { activityGroupOf, activityTypeOf } from '../utils/activityType.js';
 import { getVisitRole } from '../utils/visitRole.js';
+import { isVegetarianPlace } from '../utils/diet.js';
 import { validatePlanStops } from './itineraryValidator.js';
 import { findCandidatePlaces, findPlacesInVenue, getPlacesByIds, toPlaceView } from './place.service.js';
 import { composeSlots, mealAt, toMinutes, waitBeforeStop } from './tripComposer.js';
@@ -54,11 +55,11 @@ const PREFER_DISTRICT_BONUS = 0.3;
 const isDaytimeOnly = (place) => DAYTIME_ONLY.KINDS.includes(place.kind) || (place.category === 'attraction' && DAYTIME_ONLY.NAME.test(place.name ?? ''));
 const planHours = (place) => ((place.opening_hours?.open && place.opening_hours?.close) || !isDaytimeOnly(place) ? place.opening_hours : DAYTIME_ONLY.HOURS);
 // Quán có lịch theo ngày => xét đúng ngày đi (hôm nay, giờ VN): nghỉ hôm nay / nghỉ trưa thì không xếp vào khung đó
-const isOpenForPlan = (place, time) => (place.weekly_hours ? isOpenOnDay(place, localDayAndTime().day, time) : isOpenAt(planHours(place), time));
+export const isOpenForPlan = (place, time) => (place.weekly_hours ? isOpenOnDay(place, localDayAndTime().day, time) : isOpenAt(planHours(place), time));
 
 // Điểm hệ thống được TỰ chọn cho 1 chuyến đi chơi: bỏ sân tập, coworking, cửa hàng chưa rõ loại (điện máy, ô tô...).
 // Người dùng gọi tên thì vẫn đi (điểm bắt buộc không qua bộ lọc này).
-const isCasualPick = (place) => !NOT_LEISURE_NAME.test(place.name ?? '') && (place.category !== 'shopping' || Boolean(place.kind) || LEISURE_SHOP_NAME.test(place.name ?? ''));
+export const isCasualPick = (place) => !NOT_LEISURE_NAME.test(place.name ?? '') && (place.category !== 'shopping' || Boolean(place.kind) || LEISURE_SHOP_NAME.test(place.name ?? ''));
 
 // Nơi nguồn dữ liệu chưa có điểm nhưng người dùng MapMate đã chấm => dùng điểm cộng đồng
 const effectiveRating = (place) => (place.review_count > 0 || place.rating > 0 ? place.rating : place.community_rating?.average ?? 0);
@@ -233,9 +234,12 @@ const summarizeTransport = (stops) => {
 };
 
 // Chặng tới 1 điểm: cùng mall với điểm trước => đi bộ trong mall; còn lại => phương tiện tốt nhất
-const legTo = (previousPlace, place, from, { modes, people }) => {
+// Khoá 1 chặng (điểm trước -> điểm này) — Agent xe buýt / metro gửi chặng đi thật theo khoá này (legOverrides)
+export const legKey = (previousPlace, place) => `${previousPlace ? String(previousPlace._id) : 'origin'}>${String(place._id)}`;
+
+const legTo = (previousPlace, place, from, { modes, people, legOverrides }) => {
   if (previousPlace && sameVenue(previousPlace, place)) return insideVenueLeg(venueOf(place).name, VENUE_WALK_MINUTES);
-  return planLeg(from, place.location.coordinates, { modes, people });
+  return legOverrides?.get(legKey(previousPlace, place)) ?? planLeg(from, place.location.coordinates, { modes, people });
 };
 
 /**
@@ -243,7 +247,7 @@ const legTo = (previousPlace, place, from, { modes, people }) => {
  * Chờ tới giờ ăn => ưu tiên ở điểm trước lâu hơn (dạo mall / ngồi cà phê thêm, trong khoảng tối đa của nó), còn thiếu mới
  * chừa "thời gian tự do". Điểm người dùng tự chỉnh thời gian (stayOverrides) giữ nguyên, không bị kéo dài.
  */
-const buildStops = (orderedPlaces, { origin, modes, startTime, people, foodTour = false }, { targetMeals, stayOverrides, stayExtras }) => {
+const buildStops = (orderedPlaces, { origin, modes, startTime, people, foodTour = false, legOverrides = null, namedMeals = [] }, { targetMeals, stayOverrides, stayExtras }) => {
   let cursor = [origin.lng, origin.lat];
   let clock = startTime;
   const lastAt = { lastMealMinutes: null, lastSnackMinutes: null };
@@ -255,7 +259,7 @@ const buildStops = (orderedPlaces, { origin, modes, startTime, people, foodTour 
     const range = getStayRange(place, role, people);
     const override = stayOverrides[id];
     const stay = override != null ? clampStayOverride(override) : Math.min(range.max, range.typical + (stayExtras[id] ?? 0));
-    const travel = legTo(orderedPlaces[index - 1], place, cursor, { modes, people });
+    const travel = legTo(orderedPlaces[index - 1], place, cursor, { modes, people, legOverrides });
 
     let reachedAt = addMinutesToTime(clock, travel.minutes);
     const needed = waitBeforeStop(role, reachedAt, { ...lastAt, targetMeal: targetMeals[index], foodTour });
@@ -266,7 +270,8 @@ const buildStops = (orderedPlaces, { origin, modes, startTime, people, foodTour 
       : Math.min(previous?.stay_range.max ?? 0, (previous?.stay_typical ?? 0) + STRETCH.MAX_EXTRA_MINUTES);
     const canExtend = previous && !previous.stay_locked ? Math.max(0, extendLimit - previous.stay_minutes) : 0;
     const extend = Math.min(needed, canExtend);
-    const fits = needed - extend <= MEAL_RULES.MAX_FREE_MINUTES; // chờ quá lâu => giữ giờ, bộ kiểm tra cảnh báo
+    const freeLimit = role === VISIT_ROLES.MEAL && namedMeals.includes(targetMeals[index]) ? MEAL_RULES.MAX_FREE_BEFORE_NAMED_MEAL_MINUTES : MEAL_RULES.MAX_FREE_MINUTES;
+    const fits = needed - extend <= freeLimit; // chờ quá lâu => giữ giờ, bộ kiểm tra cảnh báo
     const freeMinutes = fits ? needed - extend : 0;
     if (fits && extend) {
       previous.stay_minutes += extend;
@@ -397,6 +402,7 @@ export const toPlanInput = (criteria) => ({
   // Người dùng tự chọn thời lượng => kéo dài các điểm cho vừa; thời lượng do hệ thống tự ước lượng => không kéo
   fillDuration: criteria.fill_duration !== false,
   foodTour: Boolean(criteria.food_tour), // food tour: ăn vặt liền tay, không bắt chờ giữa 2 quán
+  namedMeals: criteria.meals ?? [], // bữa người dùng nói rõ => được chờ lâu hơn cho đúng giờ ăn
 });
 
 // ── Sắp thứ tự đi cho đỡ chạy vòng ──
@@ -544,17 +550,34 @@ const isOpenDuringTrip = (place, startTime, durationHours) => {
 };
 
 // Ăn chay: điểm ăn (bữa chính / ăn vặt loại "food") chỉ lấy quán chay; khu vực không có quán chay thì giữ nguyên
-const VEGETARIAN_NAME = /\b(chay|vegan|vegetarian|thuan chay)\b/;
 const applyDiet = (candidates, diet) => {
   if (diet !== 'chay') return;
   const isFoodStop = (place) => place.category === 'food';
-  const isVegetarian = (place) => VEGETARIAN_NAME.test(normalizeSearchText(`${place.name} ${(place.cuisines ?? []).join(' ')}`));
-  if (!candidates.some((place) => isFoodStop(place) && isVegetarian(place))) return;
-  const kept = candidates.filter((place) => !isFoodStop(place) || isVegetarian(place));
+  if (!candidates.some((place) => isFoodStop(place) && isVegetarianPlace(place))) return;
+  const kept = candidates.filter((place) => !isFoodStop(place) || isVegetarianPlace(place));
   candidates.splice(0, candidates.length, ...kept);
 };
 
-const toPlaceFilters = (criteria) => ({
+// Dữ liệu mở hay có 2 bản ghi cho 1 nơi ("Hồ Con Rùa" và "Hồ Con Rùa (Công Trường Quốc Tế)") => 1 lộ trình ghé 2 lần.
+// Cùng tên lõi (tên này chứa tên kia) và cách nhau < 200 m => giữ bản có nhiều đánh giá hơn.
+const DUPLICATE_RADIUS_KM = 0.2;
+const coreName = (place) => normalizeSearchText(place.name).replace(/\(.*\)/g, '').trim();
+const dropNearDuplicates = (candidates) => {
+  const sorted = [...candidates].sort((a, b) => (b.review_count ?? 0) - (a.review_count ?? 0));
+  const kept = [];
+  for (const place of sorted) {
+    const name = coreName(place);
+    const duplicate = name.length >= 4 && kept.some((other) => {
+      const otherName = coreName(other);
+      return (otherName.includes(name) || name.includes(otherName)) && haversineKm(place.location.coordinates, other.location.coordinates) < DUPLICATE_RADIUS_KM;
+    });
+    if (!duplicate) kept.push(place);
+  }
+  const keep = new Set(kept);
+  candidates.splice(0, candidates.length, ...candidates.filter((place) => keep.has(place)));
+};
+
+export const toPlaceFilters = (criteria) => ({
   lat: criteria.origin.lat,
   lng: criteria.origin.lng,
   radius_km: criteria.radius_km,
@@ -591,6 +614,7 @@ export const suggestItineraries = async (criteria, mustIncludeIds = [], { exclud
     .filter((place) => !excluded.has(String(place._id)) && isCasualPick(place) && isOpenDuringTrip(place, criteria.start_time, criteria.duration_hours))
     .map((place) => ({ ...place, role: getVisitRole(place) }));
   applyDiet(candidates, criteria.diet);
+  dropNearDuplicates(candidates);
   if (candidates.length + mustInclude.length === 0) {
     throw new AppError('Không có địa điểm nào khớp bộ lọc. Hãy nới bán kính hoặc bỏ bớt điều kiện.', HTTP_STATUS.UNPROCESSABLE_ENTITY, EXPLORE_ERROR_CODES.NO_MATCHING_PLACES);
   }

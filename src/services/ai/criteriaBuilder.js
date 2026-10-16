@@ -30,7 +30,7 @@ const REFINE_CHEAPER_FACTOR = 0.7;
 // "rẻ / vừa / sang" => giới hạn giá mỗi điểm (đ/người)
 const PRICE_LEVEL_LIMITS = { cheap: { price_max: 150000 }, moderate: { price_max: 400000 }, upscale: { price_min: 200000 } };
 // Món -> loại hình để tìm quán đúng loại ("trà sữa" là cà phê, không phải quán ăn)
-const KEYWORD_CATEGORY = {
+export const KEYWORD_CATEGORY = {
   'trà sữa': ['cafe'],
   kem: ['cafe'],
   chè: ['cafe', 'food'],
@@ -48,11 +48,23 @@ const KEYWORD_CATEGORY = {
   'xem phim': ['entertainment'],
   phim: ['entertainment'],
 };
+// Từ khoá mô tả KIỂU nơi chốn (không phải tên món / tên quán) => đổi thành loại hình + phong cách để chấm điểm,
+// không dùng làm chữ tìm kiếm (tìm "hoàng hôn" theo tên thì gần như không quán nào khớp)
+const VIBE_KEYWORDS = [
+  { pattern: /(hoàng hôn|ngắm cảnh|view|cảnh đẹp|ngắm thành phố|bình minh)/, categories: ['attraction', 'park'], tags: ['ngoai-troi', 'song-ao'] },
+  { pattern: /(sống ảo|chụp ảnh|chụp hình|check.?in)/, categories: [], tags: ['song-ao'] },
+  { pattern: /(yên tĩnh|làm việc|học bài|đọc sách)/, categories: ['cafe'], tags: ['yen-tinh'] },
+  { pattern: /(lãng mạn|hẹn hò)/, categories: [], tags: ['hen-ho'] },
+];
+const vibeOf = (keyword) => VIBE_KEYWORDS.find((vibe) => vibe.pattern.test(keyword.toLowerCase())) ?? null;
+
 // Từ chung chung (tên bữa, loại hình) — đã thể hiện qua meals / categories, không phải món cụ thể để tìm quán
 const GENERIC_KEYWORDS = new Set(['ăn', 'ăn uống', 'ăn trưa', 'ăn tối', 'ăn sáng', 'ăn khuya', 'bữa trưa', 'bữa tối', 'bữa sáng', 'bữa chính', 'bữa ăn', 'ăn vặt', 'tráng miệng', 'food tour', 'quán ăn', 'nhà hàng', 'đồ ăn', 'uống', 'đồ uống', 'cà phê', 'cafe', 'coffee', 'đi chơi', 'vui chơi', 'tham quan', 'giải trí', 'mua sắm', 'check-in', 'hẹn hò']);
 const DEFAULT_KEYWORD_CATEGORIES = ['food'];
 
 const pad = (value) => String(value).padStart(2, '0');
+const minutesOf = (time) => Number(time.slice(0, 2)) * MINUTES_PER_HOUR + Number(time.slice(3, 5));
+const MEAL_STAY_MINUTES = 60;
 
 // Giờ Việt Nam hiện tại (server có thể chạy ở múi giờ khác)
 export const vietnamNow = (date = new Date()) => {
@@ -169,6 +181,12 @@ const autoDuration = (draft, notes, intent) => {
     const slots = composeSlots({ criteria: { ...draft, duration_hours: DURATION_FILTER.default } });
     hours = clamp(estimateDurationHours(slots), DURATION_FILTER);
   }
+  // Có bữa muộn hơn (ăn trưa ... rồi ăn tối) => chuyến phải kéo tới hết bữa đó, không thì bữa tối bị cắt mất
+  const lastMeal = [...(draft.meals ?? [])].map((meal) => MEAL_WINDOWS[meal]).filter(Boolean).sort((a, b) => b.preferred.localeCompare(a.preferred))[0];
+  if (lastMeal && draft.start_time && lastMeal.preferred > draft.start_time) {
+    const untilMealEnds = (minutesOf(lastMeal.preferred) + MEAL_STAY_MINUTES - minutesOf(draft.start_time)) / MINUTES_PER_HOUR;
+    hours = clamp(Math.max(hours, Math.ceil(untilMealEnds)), DURATION_FILTER);
+  }
   if (intent !== AI_INTENTS.FIND_PLACES) notes.push(`Chưa nói thời lượng — dự kiến khoảng ${hours} giờ`);
   return hours;
 };
@@ -210,12 +228,34 @@ const rememberedBudget = (remembered, intent, notes) => {
   notes.push(`${MEMORY_NOTE_PREFIX} ngân sách thường khoảng ${formatVnd(remembered.budget_per_person)}/người`);
   return remembered.budget_per_person;
 };
-// Ăn chay (đã ghi nhớ) + chuyến có ăn uống => tìm thêm quán chay
-const withDietKeyword = (interpreted, remembered, notes) => {
-  const wantsFood = !interpreted.categories.length || interpreted.categories.includes('food');
-  if (remembered?.diet !== 'chay' || !wantsFood || interpreted.keywords.some((keyword) => /chay/i.test(keyword))) return interpreted.keywords;
+// Ăn chay (đã ghi nhớ) chỉ là SỞ THÍCH: các điểm ăn (nếu có) chọn quán chay (criteria.diet) — KHÔNG tự thêm 1 quán chay
+// bắt buộc vào chuyến không hề nhắc tới ăn uống (lỗi cũ: hỏi chỗ ngắm hoàng hôn lại bị ép ghé quán lẩu chay).
+// Riêng "tìm quán ăn" thì dùng "chay" làm từ khoá tìm kiếm.
+const wantsFood = (interpreted) => interpreted.categories.includes('food') || interpreted.meals.length > 0 || interpreted.food_tour || interpreted.sequence.some((role) => role === 'meal' || role === 'snack');
+const withDietKeyword = (interpreted, remembered, notes, intent) => {
+  if (remembered?.diet !== 'chay' || interpreted.keywords.some((keyword) => /chay/i.test(keyword)) || !wantsFood(interpreted)) return interpreted.keywords;
   notes.push(`${MEMORY_NOTE_PREFIX} bạn ăn chay — ưu tiên quán chay`);
-  return ['chay', ...interpreted.keywords];
+  return intent === AI_INTENTS.FIND_PLACES ? ['chay', ...interpreted.keywords] : interpreted.keywords;
+};
+
+// "Về trước 22h": giờ đi phải trước giờ về; thời lượng không vượt quá khoảng còn lại
+const MIN_TRIP_MINUTES = 60;
+const resolveEndBy = ({ endBy, startTime, durationHours, base, now, notes }) => {
+  if (!endBy) return { startTime, durationHours };
+  let start = startTime;
+  // Model / luật hiểu nhầm giờ về thành giờ đi (start ≥ giờ về) => lấy giờ đi cũ hoặc mốc gần nhất
+  if (minutesOf(start) >= minutesOf(endBy)) {
+    const fallback = base?.start_time && minutesOf(base.start_time) < minutesOf(endBy) ? base.start_time : nextHalfHour(now);
+    if (minutesOf(fallback) >= minutesOf(endBy)) return { startTime, durationHours, tooLate: true };
+    start = fallback;
+  }
+  const available = minutesOf(endBy) - minutesOf(start);
+  // Làm tròn LÊN: 18:30 → 22:00 là 3,5 giờ => 4 giờ (làm tròn xuống thì lộ trình đúng giờ vẫn bị báo "dài hơn thời lượng");
+  // giờ về chính xác theo phút do Agent kiểm tra canh
+  const hours = Math.max(1, Math.min(durationHours, Math.ceil(available / MINUTES_PER_HOUR)));
+  if (available < MIN_TRIP_MINUTES) notes.push(`Chỉ còn ${available} phút từ ${start} tới ${endBy} — lộ trình sẽ rất ngắn`);
+  else if (hours < durationHours) notes.push(`Về trước ${endBy} — rút còn khoảng ${hours} giờ (bắt đầu ${start})`);
+  return { startTime: start, durationHours: hours };
 };
 
 const STICKY_FIELDS = ['origin', 'people', 'vehicle'];
@@ -271,9 +311,13 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
     food_tour: interpreted.food_tour || (isRefine && Boolean(base.food_tour)),
     stop_count: interpreted.stop_count ?? (isRefine ? base.stop_count ?? null : null),
   };
-  const categories = isRefine ? uniq([...(base.categories ?? []), ...interpreted.categories]) : interpreted.categories;
-  const startTime = resolveStartTime(interpreted, base, now, notes);
-  const durationHours = interpreted.duration_hours ?? (isRefine ? base.duration_hours : null) ?? autoDuration({ ...shape, categories, start_time: startTime }, notes, intent);
+  const vibes = interpreted.keywords.map(vibeOf).filter(Boolean);
+  const vibeCategories = vibes.flatMap((vibe) => vibe.categories);
+  const categories = uniq([...(isRefine ? [...(base.categories ?? []), ...interpreted.categories] : interpreted.categories), ...vibeCategories]);
+  const endBy = interpreted.end_by ?? (isRefine ? base.end_by ?? null : null);
+  const rawStart = resolveStartTime(interpreted, base, now, notes);
+  const rawDuration = interpreted.duration_hours ?? (isRefine ? base.duration_hours : null) ?? autoDuration({ ...shape, categories, start_time: rawStart }, notes, intent);
+  const { startTime, durationHours } = resolveEndBy({ endBy, startTime: rawStart, durationHours: clamp(rawDuration, DURATION_FILTER), base, now, notes });
   const priceLimits = PRICE_LEVEL_LIMITS[interpreted.price_level] ?? {};
   const radiusKm = interpreted.radius_km ?? (mentioned.near ? NEAR_RADIUS_KM : districtCenter ? DISTRICT_RADIUS_KM : base?.radius_km);
   const liveTrip = ['now', 'today', 'tonight'].includes(interpreted.date_hint);
@@ -281,7 +325,7 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
   const criteria = tripCriteriaSchema.parse({
     origin,
     categories,
-    tags: isRefine ? uniq([...(base.tags ?? []), ...interpreted.tags]) : interpreted.tags,
+    tags: uniq([...(isRefine ? [...(base.tags ?? []), ...interpreted.tags] : interpreted.tags), ...vibes.flatMap((vibe) => vibe.tags)]).slice(0, 12),
     price_min: priceLimits.price_min ?? (isRefine ? base.price_min : 0),
     price_max: priceLimits.price_max ?? (isRefine ? base.price_max ?? null : null),
     trip_budget: resolveBudget(interpreted, base, people, isRefine, notes) ?? rememberedBudget(remembered, intent, notes),
@@ -291,10 +335,11 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
     ...(radiusKm ? { radius_km: radiusKm } : {}),
     min_rating: interpreted.min_rating ?? (isRefine ? base.min_rating ?? null : null),
     start_time: startTime,
+    end_by: endBy,
     duration_hours: clamp(durationHours, DURATION_FILTER),
     open_only: interpreted.open_only ?? (liveTrip || (isRefine && Boolean(base.open_only))),
     ...shape,
-    diet: remembered?.diet === 'chay' || interpreted.keywords.some((keyword) => /chay/i.test(keyword)) ? 'chay' : null,
+    diet: remembered?.diet === 'chay' || (isRefine && base.diet === 'chay') || interpreted.keywords.some((keyword) => /chay/i.test(keyword)) ? 'chay' : null,
     fill_duration: interpreted.duration_hours != null || (isRefine && base.fill_duration === true), // chỉ kéo dài cho đủ giờ khi người dùng nói thời lượng
     district: null, // lọc theo vòng bán kính quanh tâm quận thay vì ranh giới cứng (quán sát ranh vẫn được tính)
     prefer_district: districtCenter ? district : isRefine ? base.prefer_district ?? null : null, // ...nhưng ưu tiên quán trong đúng quận
@@ -305,7 +350,7 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
 
   // 4. Món cụ thể ("ốc", "lẩu") => chọn 1 quán tốt nhất gần điểm xuất phát (hoặc trong mall) làm điểm bắt buộc
   const keywordPlaces = [];
-  const keywords = withDietKeyword(interpretation.criteria, remembered, notes).filter((keyword) => !GENERIC_KEYWORDS.has(keyword.trim().toLowerCase()) && !isMallTripWord(keyword));
+  const keywords = withDietKeyword(interpretation.criteria, remembered, notes, intent).filter((keyword) => !GENERIC_KEYWORDS.has(keyword.trim().toLowerCase()) && !isMallTripWord(keyword) && !vibeOf(keyword));
   // Người dùng đã gọi tên quán ("ăn Haidilao") => không tìm thêm quán cho từ khoá cùng vai trò ("lẩu") — tránh 2 bữa lẩu
   const namedRoles = new Set(mentioned.mustVisit.map(getVisitRole));
   for (const keyword of keywords.slice(0, MAX_KEYWORD_STOPS)) {
@@ -324,5 +369,5 @@ export const buildCriteria = async ({ interpretation, previousCriteria = null, p
     .filter((place, index, list) => !excludeIds.has(String(place._id)) && list.findIndex((other) => String(other._id) === String(place._id)) === index)
     .slice(0, AI_MAX_MUST_VISIT);
 
-  return { criteria, mustInclude, exclude: mentioned.avoid, keywordPlaces, assumptions: notes };
+  return { criteria, mustInclude, exclude: mentioned.avoid, keywordPlaces, mentionedMustVisit: mentioned.mustVisit, searchKeywords: keywords, assumptions: notes };
 };

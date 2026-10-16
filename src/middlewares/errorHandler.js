@@ -50,6 +50,6 @@ export const errorHandler = (error, _req, res, _next) => {
     message: appError?.message ?? 'Đã có lỗi xảy ra, vui lòng thử lại sau',
     errorCode: appError?.errorCode ?? ERROR_CODES.INTERNAL_ERROR,
     ...(appError?.details && { details: appError.details }),
-    ...(!env.isProduction && { stack: error.stack }),
+    ...(env.isDevelopment && { stack: error.stack }),
   });
 };

@@ -41,7 +41,11 @@ const bump = (stats, group, value) => {
 const topValues = (counts = {}, limit) =>
   Object.entries(counts).filter(([, count]) => count >= AI_MEMORY.LEARN_MIN_COUNT).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([value]) => value);
 
-export const learnFromTurn = async (userId, interpretation) => {
+// Ăn chay chỉ ghi nhớ khi người dùng NÓI VỀ BẢN THÂN ("mình ăn chay") hoặc bảo "nhớ giúp" — 1 lần tìm "quán chay"
+// không có nghĩa là người đó ăn chay (lỗi cũ: tìm quán chay 1 lần => mọi lần sau đều bị ép quán chay)
+const SELF_VEGETARIAN = /(mình|tôi|tớ|em|anh|chị|nhà mình|cả nhà|bọn mình)\s+(là người\s+|đều\s+)?ăn chay/i;
+
+export const learnFromTurn = async (userId, interpretation, text = '') => {
   const memory = await loadOrCreate(userId);
   if (!memory.enabled) return;
   const { criteria } = interpretation;
@@ -64,7 +68,7 @@ export const learnFromTurn = async (userId, interpretation) => {
     const average = stats.budgets.reduce((sum, value) => sum + value, 0) / stats.budgets.length;
     facts.budget_per_person = Math.round(average / AI_MEMORY.BUDGET_STEP) * AI_MEMORY.BUDGET_STEP;
   }
-  if (criteria.keywords.some((keyword) => VEGETARIAN.test(keyword))) facts.diet = 'chay';
+  if (SELF_VEGETARIAN.test(text)) facts.diet = 'chay';
   memory.stats = stats;
   memory.markModified('stats');
   await memory.save();

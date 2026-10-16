@@ -2,7 +2,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { GENZ_PLACES } from './data/genzPlaces.js';
 import { OPEN_DATA_BBOX } from '../constants/openData.js';
 
-const GOONG_API_KEY = process.env.GOONG_API_KEY || 'zCwHXMPzZXp3WGi4d17LBpjSOipKcUdV5jjCsDpC';
+const GOONG_API_KEY = process.env.GOONG_API_KEY;
+if (!GOONG_API_KEY) throw new Error('Thiếu GOONG_API_KEY trong .env');
 
 // Tính khoảng cách Haversine giữa 2 tọa độ (mét)
 function haversineDistanceMeters(coord1, coord2) {

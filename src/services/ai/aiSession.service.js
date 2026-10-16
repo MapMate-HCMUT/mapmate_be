@@ -52,7 +52,8 @@ const toStoredMessage = (response) => ({
   weather: response.weather,
 });
 
-export const persistSession = async ({ session, userId, text, response, tier }) => {
+// planState: { base_plan, last_options } — undefined = giữ nguyên (lượt chỉ trò chuyện / hỏi lại không làm mất lộ trình đang chỉnh)
+export const persistSession = async ({ session, userId, text, response, tier, planState = {} }) => {
   if (!userId) return null;
   const doc = session ?? new AiSession({ user_id: userId, title: text.slice(0, AI_SESSION_TITLE_LENGTH) });
   doc.messages.push({ role: 'user', content: text }, { role: 'model', content: JSON.stringify(toStoredMessage(response)) });
@@ -61,6 +62,10 @@ export const persistSession = async ({ session, userId, text, response, tier }) 
     doc.context = { budget: response.understood.criteria.trip_budget ?? 0, vehicle: response.understood.criteria.vehicle }; // Milestone 2: AI_SESSIONS.context
     doc.must_visit_ids = response.understood.must_visit.map((place) => place.id);
   }
+  if (planState.base_plan !== undefined) doc.base_plan = planState.base_plan;
+  if (planState.last_options !== undefined) doc.last_options = planState.last_options;
+  doc.markModified('base_plan');
+  doc.markModified('last_options');
   doc.pending = response.pending;
   doc.last_intent = response.intent;
   doc.model_tier = tier;

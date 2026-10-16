@@ -19,7 +19,7 @@ const NOON = 12;
 const CATEGORY_WORDS = {
   food: ['ăn', 'quán', 'nhà hàng', 'lẩu', 'ốc', 'phở', 'bún', 'cơm', 'bánh mì', 'hải sản', 'nướng', 'buffet', 'đói', 'ăn tối', 'ăn trưa', 'ăn sáng', 'ăn vặt'],
   cafe: ['cà phê', 'cafe', 'cafê', 'coffee', 'cf', 'trà sữa', 'trà', 'kem', 'chè', 'sinh tố'],
-  attraction: ['tham quan', 'bảo tàng', 'chùa', 'nhà thờ', 'di tích', 'check-in', 'check in', 'ngắm cảnh', 'tượng đài'],
+  attraction: ['tham quan', 'bảo tàng', 'chùa', 'nhà thờ', 'di tích', 'check-in', 'check in', 'ngắm cảnh', 'tượng đài', 'hoàng hôn', 'ngắm'],
   entertainment: ['xem phim', 'rạp', 'karaoke', 'bar', 'pub', 'bia', 'nhậu', 'acoustic', 'nhạc sống', 'game', 'bowling', 'giải trí'],
   park: ['công viên', 'khu vui chơi', 'sở thú', 'thảo cầm viên', 'suối tiên', 'đầm sen', 'công viên nước', 'dã ngoại', 'picnic'],
   shopping: ['mua sắm', 'shopping', 'chợ', 'mall', 'trung tâm thương mại', 'vincom', 'aeon', 'nhà sách'],
@@ -31,20 +31,26 @@ const TAG_WORDS = {
   'mot-minh': ['một mình', '1 mình', 'solo'],
   'song-ao': ['sống ảo', 'chụp hình', 'chụp ảnh', 'check-in', 'check in', 'view đẹp'],
   'yen-tinh': ['yên tĩnh', 'làm việc', 'học bài', 'đọc sách', 'chill', 'thư giãn'],
-  'ngoai-troi': ['ngoài trời', 'dã ngoại', 'picnic', 'đi dạo'],
+  'ngoai-troi': ['ngoài trời', 'dã ngoại', 'picnic', 'đi dạo', 'hoàng hôn'],
   'may-lanh': ['máy lạnh', 'điều hoà', 'mát mẻ'],
   've-dem': ['đêm', 'khuya', 'về đêm', 'nhậu'],
   'dac-san': ['đặc sản', 'món ngon', 'nổi tiếng'],
   'binh-dan': ['rẻ', 'bình dân', 'sinh viên', 'tiết kiệm', 'hạt dẻ'],
   'sang-trong': ['sang', 'cao cấp', 'sang trọng', 'fine dining', 'rooftop'],
 };
-const VEHICLE_WORDS = { bike: ['xe máy', 'xe may', 'honda'], car: ['ô tô', 'xe hơi', 'oto', 'taxi'], walk: ['đi bộ'], public: ['xe buýt', 'xe bus', 'bus', 'metro', 'công cộng'] };
+const VEHICLE_WORDS = { bike: ['xe máy', 'xe may', 'honda'], car: ['ô tô', 'xe hơi', 'oto', 'taxi'], walk: ['đi bộ'], public: ['xe buýt', 'xe bus', 'buýt', 'buyt', 'bus', 'metro', 'công cộng'] };
 const DISH_WORDS = ['lẩu', 'ốc', 'phở', 'bún bò', 'bún đậu', 'cơm tấm', 'bánh mì', 'hải sản', 'nướng', 'bbq', 'chay', 'sushi', 'pizza', 'trà sữa', 'bánh xèo', 'hủ tiếu', 'dimsum', 'rooftop', 'acoustic', 'buffet'];
 const PART_OF_DAY = { sáng: '08:00', trưa: '11:30', chiều: '14:30', tối: '18:30', đêm: '20:30', khuya: '21:30' };
 const REFINE_WORDS = /(rẻ hơn|đắt hơn|gần hơn|xa hơn|sớm hơn|muộn hơn|trễ hơn|thêm|bớt|bỏ|đổi|thay|ít hơn|nhiều hơn|khác đi|cái khác)/;
 const FIND_WORDS = /((quán|chỗ|nơi|tiệm)(\s+\S+){0,3}\s+nào|ở đâu|tìm (giúp|cho|quán|chỗ)|gợi ý (vài|mấy|1|một) ?(quán|chỗ|nơi)|có quán)/;
 const PLAN_WORDS = /(lộ trình|lịch trình|kế hoạch|đi chơi|đi đâu|tour|hành trình|plan)/;
 const SMALLTALK = /^(xin chào|chào|hi|hello|hey|alo|cảm ơn|cám ơn|thanks?|ok|oke)\b/;
+const SMALLTALK_MAX_LENGTH = 30;
+/** Chào hỏi / cảm ơn ngắn, không kèm nhu cầu => bộ điều phối trả lời luôn, không gọi LLM hiểu yêu cầu */
+export const isPlainSmalltalk = (text) => {
+  const lower = text.trim().toLowerCase();
+  return lower.length < SMALLTALK_MAX_LENGTH && SMALLTALK.test(lower) && !/(đi|ăn|quán|chỗ|lộ trình|uống|chơi)/.test(lower);
+};
 const STOP_AFTER_NAME = '(?=\\s+(?:đi|muốn|thì|rồi|và|với|lúc|khoảng|tầm|ngân sách|cho)\\b|[,.;!?]|$)';
 
 const hasAny = (text, words) => words.some((word) => text.includes(word));
@@ -78,6 +84,55 @@ export const extractTime = (lower) => {
   }
   const part = Object.keys(PART_OF_DAY).find((word) => lower.includes(word));
   return part ? PART_OF_DAY[part] : null;
+};
+
+// "về trước 22h", "xong trước 9h tối", "kết thúc trước 10 giờ" => giờ KẾT THÚC (không phải giờ đi).
+// Trả cả câu đã bỏ cụm đó để bước bắt giờ đi không hiểu nhầm "22h" là giờ xuất phát (lỗi người dùng gặp).
+const END_BY = /(?:về|xong|kết thúc|tan)?\s*(?:trước|không quá|chậm nhất(?: là)?)\s*(\d{1,2})\s*(?::|h|giờ|g)\s*(\d{2})?\s*(sáng|trưa|chiều|tối|đêm)?/;
+const EVENING_GUESS_MAX_HOUR = 6; // "về trước 6h" (không nói buổi) => 18:00
+export const extractEndBy = (lower) => {
+  const match = lower.match(END_BY);
+  if (!match) return { endBy: null, rest: lower };
+  let hour = Number(match[1]);
+  if ((['chiều', 'tối', 'đêm'].includes(match[3]) && hour < NOON) || (!match[3] && hour <= EVENING_GUESS_MAX_HOUR)) hour += NOON;
+  if (hour > 23) return { endBy: null, rest: lower };
+  return { endBy: `${pad(hour)}:${pad(match[2] ?? 0)}`, rest: lower.replace(match[0], ' ') };
+};
+
+// ── Sửa 1 lộ trình có sẵn: "đổi quán ăn thành quán chay", "bỏ điểm 2", "thêm 1 quán cà phê", "sắp xếp lại" ──
+const ROLE_WORDS = [
+  ['snack', /(ăn vặt|tráng miệng|chè|kem\b)/],
+  ['drink', /(cà phê|cafe|cf\b|trà sữa|đồ uống|chỗ uống|quán nước|\bbar\b)/],
+  ['meal', /(quán ăn|chỗ ăn|nhà hàng|bữa (chính|tối|trưa|sáng)|ăn tối|ăn trưa|quán lẩu|quán nướng)/],
+  ['activity', /(chỗ chơi|điểm chơi|tham quan|vui chơi|bảo tàng|công viên|mua sắm|ngắm)/],
+];
+const roleOf = (phrase) => ROLE_WORDS.find(([, pattern]) => pattern.test(phrase))?.[0] ?? null;
+const stopNumberOf = (phrase) => Number(phrase.match(/(?:điểm|chỗ|quán|địa điểm)\s*(?:số|thứ)?\s*(\d)\b/)?.[1]) || null;
+const dishOf = (phrase) => DISH_WORDS.find((word) => phrase.includes(word)) ?? null;
+const CLAUSE_END = '(?=[,.;!?]|\\s+(?:mà|nhưng|và|rồi|với)\\s|$)';
+const REPLACE_EDIT = new RegExp(`(?:đổi|thay)\\s+(.+?)\\s+(?:thành|sang|bằng)\\s+(.+?)${CLAUSE_END}`);
+const REMOVE_EDIT = /(?:bỏ|xoá|xóa|bớt)\s+(?:đi\s+)?((?:điểm|chỗ|quán)\s*(?:số|thứ)?\s*\d\b|quán ăn|chỗ ăn|nhà hàng|quán cà phê|cà phê|chỗ uống|ăn vặt|chỗ chơi|bảo tàng|công viên)/;
+const ADD_EDIT = new RegExp(`thêm\\s+(.+?)${CLAUSE_END}`);
+const REORDER = /(sắp xếp lại|sắp lại|tối ưu|đỡ (chạy|đi) vòng|thứ tự hợp lý|đi cho thuận)/;
+
+const edit = (action, fields) => ({ action, stop_number: null, target_name: null, target_role: null, keyword: null, new_role: null, ...fields });
+export const extractEdits = (lower) => {
+  const edits = [];
+  const replace = lower.match(REPLACE_EDIT);
+  if (replace) {
+    const target = { stop_number: stopNumberOf(replace[1]), target_role: roleOf(replace[1]) };
+    const keyword = dishOf(replace[2]);
+    if ((target.stop_number || target.target_role) && (keyword || roleOf(replace[2]))) edits.push(edit('replace', { ...target, keyword, new_role: roleOf(replace[2]) }));
+  }
+  const remove = lower.match(REMOVE_EDIT);
+  if (remove) edits.push(edit('remove', { stop_number: stopNumberOf(remove[1]), target_role: stopNumberOf(remove[1]) ? null : roleOf(remove[1]) ?? (/(quán ăn|chỗ ăn|nhà hàng)/.test(remove[1]) ? 'meal' : null) }));
+  const add = lower.match(ADD_EDIT);
+  if (add) {
+    const keyword = dishOf(add[1]);
+    const role = roleOf(add[1]) ?? (keyword ? 'meal' : null);
+    if (role) edits.push(edit('add', { keyword, new_role: role }));
+  }
+  return edits.filter((item) => item.stop_number || item.target_role || item.action === 'add');
 };
 
 export const extractDateHint = (lower) => {
@@ -118,7 +173,7 @@ const extractPlaces = (text, district) => {
     for (const match of text.matchAll(pattern)) {
       const name = match[1].trim();
       const isDistrict = district && normalizeSearchText(name).includes(normalizeSearchText(district));
-      const isCount = /^\d+\s*(chỗ|quán|điểm|nơi|người)/.test(name); // "đi 3 chỗ quanh..." không phải tên
+      const isCount = /^\d+\s*(chỗ|quán|điểm|nơi|người)/.test(name) || /^(điểm|chỗ|quán|địa điểm)\s*(số|thứ)?\s*\d/i.test(name); // "đi 3 chỗ", "bỏ điểm 2" không phải tên
       if (name.length >= 3 && /^[A-ZĐÀ-Ỹ0-9]/.test(name) && !isDistrict && !isCount) found.push({ name: name.slice(0, 80), role });
     }
   };
@@ -162,8 +217,9 @@ const decideQuality = ({ intent, criteria, placesMentioned, askedBefore, refusal
 };
 
 /** Hiểu câu theo luật => object đúng `interpretationSchema`. */
-export const interpretWithRules = (text, { previousCriteria = null, askedBefore = false } = {}) => {
+export const interpretWithRules = (text, { previousCriteria = null, askedBefore = false, hasBasePlan = false } = {}) => {
   const lower = text.toLowerCase();
+  const { endBy, rest: withoutEndBy } = extractEndBy(lower);
   const plain = normalizeSearchText(text);
   const district = extractDistrict(lower, plain);
   const foodTour = isFoodTour(lower);
@@ -179,7 +235,8 @@ export const interpretWithRules = (text, { previousCriteria = null, askedBefore 
     budget_total: null,
     ...extractBudget(lower),
     price_level: /(rẻ hơn|rẻ|bình dân|sinh viên|hạt dẻ)/.test(lower) ? 'cheap' : /(sang|cao cấp|sang trọng)/.test(lower) ? 'upscale' : null,
-    start_time: extractTime(lower),
+    start_time: extractTime(withoutEndBy),
+    end_by: endBy,
     date_hint: extractDateHint(lower),
     duration_hours: extractDuration(lower),
     vehicle,
@@ -198,7 +255,11 @@ export const interpretWithRules = (text, { previousCriteria = null, askedBefore 
   const placeQuestion = detectPlaceQuestion(text, lower);
   const flagged = moderateByRules(text);
   const refusal = flagged ? SAFETY_REPLIES[flagged.category] : null;
-  let intent = detectIntent(lower, { hasPrevious: Boolean(previousCriteria), signals });
+  const edits = hasBasePlan || previousCriteria ? extractEdits(lower) : [];
+  const reorder = (hasBasePlan || Boolean(previousCriteria)) && REORDER.test(lower);
+  let intent = detectIntent(lower, { hasPrevious: Boolean(previousCriteria) || hasBasePlan, signals: signals + (endBy ? 1 : 0) });
+  // Đang có lộ trình mà chỉ nói giờ về ("về trước 10h tối nhé") => sửa giờ của lộ trình đó, không lên lộ trình mới
+  if (edits.length || reorder || (endBy && (hasBasePlan || previousCriteria) && !PLAN_WORDS.test(lower))) intent = AI_INTENTS.REFINE_TRIP;
   if (placeQuestion && !criteria.sequence.length) intent = AI_INTENTS.ASK_PLACE;
   if (mentionsOtherCity(lower)) intent = AI_INTENTS.OUT_OF_SCOPE;
   const placesMentioned = intent === AI_INTENTS.ASK_PLACE ? [] : extractPlaces(text, district);
@@ -212,5 +273,7 @@ export const interpretWithRules = (text, { previousCriteria = null, askedBefore 
     criteria,
     place_question: placeQuestion ?? { place_name: null, topics: [] },
     places_mentioned: placesMentioned,
+    edits,
+    reorder,
   });
 };

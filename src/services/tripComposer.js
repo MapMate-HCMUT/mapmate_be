@@ -127,8 +127,37 @@ const deriveRoles = (criteria) => {
  * @param {{ criteria, mustInclude: Place[] }} input
  * @returns {Array<{ role, fixed: Place|null, estimated_time, meal }>} — đúng thứ tự đi
  */
+// Thứ tự người dùng nói ("ăn trưa, đi chơi, rồi ăn tối") mà giữa 2 bữa còn trống cả buổi chiều => chèn thêm 1–2 điểm
+// (vui chơi rồi đồ uống) cho tới gần bữa sau, thay vì ngồi chờ 4 tiếng (bị bộ kiểm tra loại luôn bữa tối)
+const GAP_FILLERS = [ACTIVITY, DRINK, ACTIVITY];
+const FILLER_ESTIMATE_MINUTES = 60; // điểm chen thêm thường ngắn (dạo, uống nước) — ước lượng theo 90′ thì chiều vẫn trống
+const fillMealGaps = (roles, startTime) => {
+  const filled = [];
+  let clock = toMinutes(startTime);
+  let lastMeal = null;
+  let added = 0;
+  for (const role of roles) {
+    if (role === MEAL && lastMeal != null) {
+      const earliest = lastMeal + MEAL_RULES.MIN_GAP_MINUTES;
+      const nextWindow = Object.values(MEAL_WINDOWS).map((window) => toMinutes(window.from)).filter((start) => start >= earliest).sort((a, b) => a - b)[0] ?? earliest;
+      while (added < GAP_FILLERS.length && filled.length < ITINERARY_MAX_STOPS - 1) {
+        const filler = GAP_FILLERS[added];
+        const minutes = Math.min(ROLE_SLOT_MINUTES[filler], FILLER_ESTIMATE_MINUTES) + SLOT_TRAVEL_MINUTES;
+        if (nextWindow - clock < minutes) break;
+        filled.push(filler);
+        clock += minutes;
+        added += 1;
+      }
+    }
+    if (role === MEAL) lastMeal = clock;
+    filled.push(role);
+    clock += ROLE_SLOT_MINUTES[role] + SLOT_TRAVEL_MINUTES;
+  }
+  return filled;
+};
+
 export const composeSlots = ({ criteria, mustInclude = [] }) => {
-  const roles = criteria.sequence?.length ? [...criteria.sequence] : deriveRoles(criteria);
+  const roles = criteria.sequence?.length ? fillMealGaps([...criteria.sequence], criteria.start_time) : deriveRoles(criteria);
   const slots = roles.map((role) => ({ role, fixed: null }));
   // Điểm người dùng gọi tên / tự chọn: lấp vào vị trí cùng vai trò đầu tiên còn trống, không có thì thêm vị trí mới
   for (const place of mustInclude) {
@@ -138,8 +167,13 @@ export const composeSlots = ({ criteria, mustInclude = [] }) => {
     else slots.push({ role, fixed: place });
   }
   let clock = criteria.start_time;
+  // Người dùng nói rõ các bữa ("ăn trưa ... rồi ăn tối") => bữa chính thứ i là bữa thứ i họ nói (giờ ước tính 16:30 nằm giữa
+  // 2 khung ăn sẽ không thành "bữa tối" nếu chỉ đoán theo giờ => bộ lên lịch bỏ mất bữa đó)
+  const namedMeals = [...(criteria.meals ?? [])].sort((a, b) => MEAL_WINDOWS[a].preferred.localeCompare(MEAL_WINDOWS[b].preferred));
+  let mealIndex = 0;
   return slots.slice(0, ITINERARY_MAX_STOPS).map((slot) => {
-    const scheduled = { ...slot, estimated_time: clock, meal: slot.role === MEAL ? mealAt(clock) : null };
+    const meal = slot.role === MEAL ? namedMeals[mealIndex++] ?? mealAt(clock) : null;
+    const scheduled = { ...slot, estimated_time: clock, meal };
     clock = addMinutesToTime(clock, ROLE_SLOT_MINUTES[slot.role] + SLOT_TRAVEL_MINUTES);
     return scheduled;
   });
