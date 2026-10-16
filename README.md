@@ -254,3 +254,16 @@ Luôn hiển thị nguồn: "Dữ liệu xe buýt & metro: Trung tâm Quản lý
 - Quyền xem: bài `friends` chỉ tác giả + bạn bè thấy; không có quyền → trả 404. Chỉ gắn thẻ / gửi bài cho **bạn bè**.
 - Thông báo mới: lời mời kết bạn, được đồng ý, được gắn thẻ, bài được đăng lại, được chia sẻ bài viết.
 - Collection mới: `friendships` (unique `pair_key`), `posts`, `post_likes` (unique `{post_id, user_id}`), `place_pins` (unique `{user_id, place_id}`).
+
+## License
+
+Copyright © 2026:
+
+- Khưu Gia Bảo
+- Trần Minh Huy
+- Nguyễn Gia Huy
+- Võ Nguyên Tuấn Kiệt
+
+Licensed under the GNU Affero General Public License,
+version 3 or any later version.
+See [LICENSE](LICENSE) for details.
