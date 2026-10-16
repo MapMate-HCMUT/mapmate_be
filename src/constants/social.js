@@ -56,6 +56,11 @@ export const PIN_NOTE_MAX_LENGTH = 300;
 
 export const FEED_DEFAULT_LIMIT = 10;
 export const FEED_MAX_LIMIT = 30;
+
+// Bình luận dưới bài viết (collection post_comments)
+export const COMMENT_MAX_LENGTH = 500;
+export const COMMENT_DEFAULT_LIMIT = 20;
+export const COMMENT_MAX_LIMIT = 50;
 export const TRENDING_TAGS_LIMIT = 10;
 export const TRENDING_TAGS_WINDOW_DAYS = 14;
 export const TRENDING_TAGS_CACHE_TTL_MS = 5 * 60 * 1000;

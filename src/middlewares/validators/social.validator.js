@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import {
+  COMMENT_DEFAULT_LIMIT,
+  COMMENT_MAX_LENGTH,
+  COMMENT_MAX_LIMIT,
   FEED_DEFAULT_LIMIT,
   FEED_MAX_LIMIT,
   FEED_SCOPES,
@@ -48,6 +51,28 @@ export const createPostSchema = z
 export const repostSchema = z.object({ content: postContent.default('') });
 
 // GET /api/posts
+// PATCH /api/posts/:id — chỉ gửi những gì muốn đổi; media = danh sách CUỐI CÙNG (file cũ giữ lại + file mới tải lên)
+export const updatePostSchema = z
+  .object({
+    content: postContent.optional(),
+    rating: starRating.nullable().optional(),
+    visited: z.boolean().optional(),
+    tags: hashtagList.optional(),
+    visibility: z.enum(Object.values(POST_VISIBILITY)).optional(),
+    media: z.array(mediaItem).max(POST_MEDIA.MAX_ITEMS, `Mỗi bài tối đa ${POST_MEDIA.MAX_ITEMS} ảnh / video`).optional(),
+  })
+  .refine((changes) => Object.values(changes).some((value) => value !== undefined), 'Không có gì để cập nhật');
+
+// Bình luận
+export const commentBodySchema = z.object({
+  content: z.string('Nội dung phải là chuỗi ký tự').trim().min(1, 'Bạn chưa viết bình luận').max(COMMENT_MAX_LENGTH, `Bình luận tối đa ${COMMENT_MAX_LENGTH} ký tự`),
+});
+export const commentsQuerySchema = z.object({
+  after: cursorDate,
+  limit: z.coerce.number().int().min(1).max(COMMENT_MAX_LIMIT).default(COMMENT_DEFAULT_LIMIT),
+});
+export const commentParamsSchema = z.object({ id: objectId('Bài viết'), commentId: objectId('Bình luận') });
+
 export const feedQuerySchema = z.object({
   scope: z.enum(Object.values(FEED_SCOPES)).default(FEED_SCOPES.PUBLIC),
   tag: hashtag.optional(),

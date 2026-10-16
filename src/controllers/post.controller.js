@@ -12,7 +12,9 @@ import {
   sharePostWithFriends,
   undoRepost,
   unlikePost,
+  updatePost,
 } from '../services/post.service.js';
+import { addComment, listComments, removeComment } from '../services/comment.service.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendSuccess } from '../utils/response.js';
@@ -58,3 +60,20 @@ export const share = asyncHandler(async (req, res) => {
   const data = await sharePostWithFriends(req.user.id, req.validated.params.id, req.validated.body);
   return sendSuccess(res, { message: `Đã gửi cho ${data.sent} người bạn`, data });
 });
+
+// ── Bình luận ──
+export const listPostComments = asyncHandler(async (req, res) =>
+  sendSuccess(res, { data: await listComments(req.validated.params.id, req.user?.id, req.validated.query) }),
+);
+export const createComment = asyncHandler(async (req, res) =>
+  sendSuccess(res, { statusCode: HTTP_STATUS.CREATED, data: await addComment(req.user.id, req.validated.params.id, req.validated.body.content) }),
+);
+export const deleteComment = asyncHandler(async (req, res) => {
+  await removeComment(req.user.id, req.validated.params.id, req.validated.params.commentId);
+  return sendSuccess(res, { message: 'Đã xoá bình luận' });
+});
+
+// PATCH /api/posts/:id — chỉnh sửa bài viết của mình
+export const update = asyncHandler(async (req, res) =>
+  sendSuccess(res, { message: 'Đã lưu thay đổi', data: await updatePost(req.user.id, req.validated.params.id, req.validated.body) }),
+);
