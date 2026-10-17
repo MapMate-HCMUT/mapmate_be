@@ -20,7 +20,7 @@ import {
   updateMe,
   updatePlace,
 } from '../controllers/business.controller.js';
-import { optionalAuth, requireAuth } from '../middlewares/auth.middleware.js';
+import { optionalAuth, requireAuth, requireMember } from '../middlewares/auth.middleware.js';
 import { placeSearchRateLimiter, socialWriteRateLimiter } from '../middlewares/rateLimiter.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import {
@@ -52,7 +52,7 @@ businessRouter.post('/places/:id/events', optionalAuth, placeSearchRateLimiter, 
 
 // Chủ doanh nghiệp
 businessRouter.get('/duplicates', requireAuth, placeSearchRateLimiter, validate({ query: duplicatesQuerySchema }), duplicates);
-businessRouter.post('/', requireAuth, socialWriteRateLimiter, validate({ body: businessRegisterSchema }), register);
+businessRouter.post('/', requireAuth, requireMember, socialWriteRateLimiter, validate({ body: businessRegisterSchema }), register);
 businessRouter.get('/me', requireAuth, me);
 businessRouter.patch('/me', requireAuth, socialWriteRateLimiter, validate({ body: businessUpdateSchema }), updateMe);
 businessRouter.patch('/me/tier', requireAuth, socialWriteRateLimiter, validate({ body: tierChangeSchema }), changeTier);

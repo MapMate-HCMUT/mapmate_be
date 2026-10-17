@@ -1,5 +1,7 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
-import { BCRYPT_ROUNDS } from '../constants/auth.js';
+import { BCRYPT_ROUNDS, GUEST_EMAIL_DOMAIN, GUEST_ID_BYTES, GUEST_USERNAME_PREFIX } from '../constants/auth.js';
+import { USER_ROLES } from '../constants/business.js';
 import { ERROR_CODES } from '../constants/errorCodes.js';
 import { HTTP_STATUS } from '../constants/httpStatus.js';
 import { User } from '../models/user.model.js';
@@ -31,6 +33,28 @@ export const loginUser = async ({ email, password }) => {
 
   if (!user || !isValid) {
     throw new AppError('Email hoặc mật khẩu không đúng', HTTP_STATUS.UNAUTHORIZED, ERROR_CODES.INVALID_CREDENTIALS);
+  }
+  return { token: signAccessToken(user._id, user.token_version ?? 0), user: toPublicProfile(user) };
+};
+
+/**
+ * Vào bằng tài khoản khách: không cần email / mật khẩu / thông tin cá nhân. Mỗi lần bấm tạo 1 tài khoản khách mới
+ * (role "guest") để vẫn check-in, lưu lộ trình... bình thường, nhưng bị chặn mọi tính năng AI (middleware requireMember).
+ */
+export const guestLoginUser = async () => {
+  let user = null;
+  while (!user) {
+    const suffix = crypto.randomBytes(GUEST_ID_BYTES).toString('hex');
+    try {
+      user = await User.create({
+        email: `guest-${suffix}@${GUEST_EMAIL_DOMAIN}`,
+        username: `${GUEST_USERNAME_PREFIX}${suffix}`,
+        role: USER_ROLES.GUEST,
+        password: null,
+      });
+    } catch (error) {
+      if (error?.code !== 11000) throw error; // trùng ngẫu nhiên (rất hiếm) => thử mã khác
+    }
   }
   return { token: signAccessToken(user._id, user.token_version ?? 0), user: toPublicProfile(user) };
 };
