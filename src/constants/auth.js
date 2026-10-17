@@ -15,6 +15,11 @@ export const RESERVED_USERNAMES = [
   'settings', 'null', 'undefined', 'anonymous', 'guest',
 ];
 
+// Tài khoản khách: không email thật => email nội bộ (miền .invalid không bao giờ nhận thư), tên "khach_xxxxxx"
+export const GUEST_EMAIL_DOMAIN = 'guest.mapmate.invalid';
+export const GUEST_USERNAME_PREFIX = 'khach_';
+export const GUEST_ID_BYTES = 4; // 8 ký tự hex => "khach_" + 8 = 14 ký tự, trong giới hạn username
+
 export const AUTH_RATE_LIMIT = {
   WINDOW_MS: 15 * 60 * 1000,
   MAX_REQUESTS: 20,

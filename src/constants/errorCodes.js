@@ -47,4 +47,5 @@ export const EXPLORE_ERROR_CODES = {
   CANNOT_FRIEND_SELF: 'CANNOT_FRIEND_SELF',
   TOO_MANY_PENDING_REQUESTS: 'TOO_MANY_PENDING_REQUESTS',
   FORBIDDEN: 'FORBIDDEN',
+  GUEST_NOT_ALLOWED: 'GUEST_NOT_ALLOWED', // tài khoản khách gọi tính năng chỉ dành cho thành viên (AI...)
 };

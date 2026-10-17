@@ -2,7 +2,8 @@
 // Mỗi gói khác nhau ở: số cửa hàng, dung lượng ảnh / video, và độ phủ (mức ưu tiên + bán kính được đẩy lên khi xếp "Đề xuất").
 // AI Planner KHÔNG dùng các ưu tiên này: lộ trình AI vẫn chọn theo chất lượng + khoảng cách để giữ khách quan.
 
-export const USER_ROLES = { USER: 'user', BUSINESS: 'business' };
+// guest = khách dùng thử: không cần email / thông tin cá nhân, KHÔNG được dùng AI (chat, giọng nói, ghi nhớ) và không đăng ký doanh nghiệp
+export const USER_ROLES = { USER: 'user', BUSINESS: 'business', GUEST: 'guest' };
 export const USER_ROLE_VALUES = Object.values(USER_ROLES);
 
 export const BUSINESS_TIERS = { BASIC: 'basic', GROWTH: 'growth', PREMIUM: 'premium' };
