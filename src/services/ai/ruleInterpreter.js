@@ -17,7 +17,7 @@ const NOON = 12;
 
 // Từ khoá -> loại hình / phong cách / phương tiện (so trên chữ thường CÒN DẤU để phân biệt "phở" với "phố")
 // "quán" đứng một mình không phải quán ĂN ("quán cà phê nào gần tôi") => chỉ "quán ăn" mới tính là ăn uống
-const CATEGORY_WORDS = {
+export const CATEGORY_WORDS = {
   food: ['ăn', 'quán ăn', 'nhà hàng', 'lẩu', 'ốc', 'phở', 'bún', 'cơm', 'bánh mì', 'hải sản', 'nướng', 'buffet', 'đói', 'ăn tối', 'ăn trưa', 'ăn sáng', 'ăn vặt'],
   cafe: ['cà phê', 'cafe', 'cafê', 'coffee', 'cf', 'trà sữa', 'trà', 'kem', 'chè', 'sinh tố'],
   attraction: ['tham quan', 'bảo tàng', 'chùa', 'nhà thờ', 'di tích', 'check-in', 'check in', 'ngắm cảnh', 'tượng đài', 'hoàng hôn', 'ngắm'],
@@ -40,7 +40,7 @@ const TAG_WORDS = {
   'sang-trong': ['sang', 'cao cấp', 'sang trọng', 'fine dining', 'rooftop'],
 };
 const VEHICLE_WORDS = { bike: ['xe máy', 'xe may', 'honda'], car: ['ô tô', 'xe hơi', 'oto', 'taxi'], walk: ['đi bộ'], public: ['xe buýt', 'xe bus', 'buýt', 'buyt', 'bus', 'metro', 'công cộng'] };
-const DISH_WORDS = ['lẩu', 'ốc', 'phở', 'bún bò', 'bún đậu', 'cơm tấm', 'bánh mì', 'hải sản', 'nướng', 'bbq', 'chay', 'sushi', 'pizza', 'trà sữa', 'bánh xèo', 'hủ tiếu', 'dimsum', 'rooftop', 'acoustic', 'buffet'];
+export const DISH_WORDS = ['lẩu', 'ốc', 'phở', 'bún bò', 'bún đậu', 'cơm tấm', 'bánh mì', 'hải sản', 'nướng', 'bbq', 'chay', 'sushi', 'pizza', 'trà sữa', 'bánh xèo', 'hủ tiếu', 'dimsum', 'rooftop', 'acoustic', 'buffet'];
 const PART_OF_DAY = { sáng: '08:00', trưa: '11:30', chiều: '14:30', tối: '18:30', đêm: '20:30', khuya: '21:30' };
 const REFINE_WORDS = /(rẻ hơn|đắt hơn|gần hơn|xa hơn|sớm hơn|muộn hơn|trễ hơn|thêm|bớt|bỏ|đổi|thay|ít hơn|nhiều hơn|khác đi|cái khác)/;
 export const FIND_WORDS = /((quán|chỗ|nơi|tiệm)(\s+\S+){0,3}\s+nào|ở đâu|tìm (giúp|cho|quán|chỗ)|gợi ý (vài|mấy|1|một) ?(quán|chỗ|nơi)|có quán)/;
@@ -161,7 +161,7 @@ const extractPeople = (lower) => {
   return null;
 };
 
-const extractDistrict = (lower, plain) => {
+export const extractDistrict = (lower, plain) => {
   const numbered = plain.match(/\b(?:quan|q\.?|district)\s*(\d{1,2})\b/);
   if (numbered) return `Quận ${Number(numbered[1])}`;
   return DISTRICT_NAMES.find((name) => !name.startsWith('Quận') && lower.includes(name.toLowerCase())) ?? null;

@@ -89,6 +89,7 @@ export const decideAction = ({ interpretation, source, llmConfigured, askedBefor
 
 // ── Nhắc lại ý đã hiểu (để người dùng xác nhận) ──
 const VEHICLE_LABELS = { bike: 'xe máy', car: 'ô tô', walk: 'đi bộ', public: 'xe buýt / metro', bus: 'xe buýt', metro_grab: 'metro + Grab' };
+const CATEGORY_LABELS = { food: 'quán ăn', cafe: 'cà phê', attraction: 'tham quan', entertainment: 'giải trí', park: 'công viên', shopping: 'mua sắm' };
 const DATE_LABELS = { now: 'ngay bây giờ', today: 'hôm nay', tonight: 'tối nay', tomorrow: 'ngày mai', weekend: 'cuối tuần' };
 const EDIT_VERBS = { add: 'thêm', remove: 'bỏ', replace: 'đổi' };
 
@@ -104,7 +105,7 @@ export const summarizeUnderstanding = (interpretation) => {
   const parts = [
     ...describeEdits(interpretation.edits ?? []),
     interpretation.reorder && 'sắp xếp lại thứ tự',
-    criteria.keywords.length && criteria.keywords.join(', '),
+    criteria.keywords.length ? criteria.keywords.join(', ') : criteria.categories.map((category) => CATEGORY_LABELS[category] ?? category).join(', '),
     criteria.district && `ở ${criteria.district}`,
     DATE_LABELS[criteria.date_hint],
     criteria.start_time && `đi lúc ${criteria.start_time}`,

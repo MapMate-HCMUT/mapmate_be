@@ -34,6 +34,7 @@ import { questionsFor } from './clarifyQuestions.js';
 import { buildCriteria, MEMORY_NOTE_PREFIX, tripMoment, vietnamNow } from './criteriaBuilder.js';
 import { checkFeasibility } from './feasibility.js';
 import { guardInput } from './inputGuard.js';
+import { continueFind, groundInterpretation, lockToMentionedKinds } from './requestGrounding.js';
 import { basePlanFromItinerary, basePlanFromOption, baseCriteriaOf, describeBasePlan, editPlan, loadBasePlaces, shortenStays } from './editor.agent.js';
 import { interpretRequest } from './interpreter.agent.js';
 import { extractDateHint, extractEndBy, extractTime } from './ruleInterpreter.js';
@@ -114,11 +115,16 @@ const retrieve = async ({ intent, built, recentIds = [] }) => {
   const lockedKeys = ['categories', 'tags', ...(filters.price_max !== undefined ? ['price_min', 'price_max'] : [])]; // có ngân sách => tìm xa hơn chứ không bỏ giá
   const found = await searchPlaces(filters, null, { promote: false, lockedKeys });
   if (found.relaxed?.labels.length) built.assumptions.push(`Không có chỗ khớp hết điều kiện — đã tạm bỏ: ${found.relaxed.labels.join(', ')}`);
-  const fits = (place) => (!criteria.categories.length || criteria.categories.includes(place.category)) && (!criteria.tags.length || criteria.tags.some((tag) => place.tags?.includes(tag)));
+  // Món người dùng hỏi phải có trong TÊN / món đặc trưng của quán — ô tìm kiếm so cả địa chỉ ("Lầu 1" bỏ dấu thành "lau" = "lẩu")
+  const keyword = built.keywords[0] ? normalizeSearchText(built.keywords[0]) : null;
+  const servesKeyword = (place) => !keyword || normalizeSearchText([place.name, ...(place.specialties ?? []), ...(place.cuisines ?? [])].join(' ')).includes(keyword);
+  const fits = (place) => (!criteria.categories.length || criteria.categories.includes(place.category)) && (!criteria.tags.length || criteria.tags.some((tag) => place.tags?.includes(tag))) && servesKeyword(place);
   const pinned = mustInclude.map((place) => toPlaceView(place)); // quán người dùng gọi tên => luôn đứng đầu
   const seen = new Set(recentIds.map(String));
-  const fresh = found.items.filter((item) => fits(item) && !pinned.some((place) => String(place.id) === String(item.id)));
-  const places = dropDuplicatePlaces([...pinned, ...fresh.filter((item) => !seen.has(String(item.id))), ...fresh.filter((item) => seen.has(String(item.id)))]).slice(0, AI_FIND_PLACES_LIMIT);
+  const matching = found.items.filter((item) => fits(item) && !pinned.some((place) => String(place.id) === String(item.id)));
+  // Hỏi lại => chỉ đưa quán CHƯA gợi ý; hết quán mới mới đưa lại quán cũ. Khớp được bao nhiêu thì trả bấy nhiêu, không độn cho đủ 6
+  const unseen = matching.filter((item) => !seen.has(String(item.id)));
+  const places = dropDuplicatePlaces([...pinned, ...(unseen.length ? unseen : matching)]).slice(0, AI_FIND_PLACES_LIMIT);
   return { options: [], places, retrievalError: places.length ? null : noMatchMessage(criteria) };
 };
 
@@ -277,9 +283,17 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
   // Bước hiểu yêu cầu cũng tự đánh giá an toàn — phòng khi lớp 2–3 hết hạn mức / lỗi
   if (understood.interpretation.safety_category !== SAFETY_CATEGORIES.NONE) return refuse(understood.interpretation.safety_category);
 
-  const resolved = shortcut ? { interpretation: understood.interpretation, continued: true } : resolvePending(pending, applyHints(understood.interpretation, hints));
+  // 1a. Bám đúng lời người dùng: bỏ món / quận model tự thêm từ ghi nhớ, bỏ món người dùng đang than phiền,
+  //     gọi tên loại chỗ thì chỉ tìm loại đó, lọc tiếp kết quả vừa tìm ("dưới 40k đi") thay vì hỏi lại từ đầu
+  const previousReply = history.findLast((item) => item.role === 'assistant')?.content ?? '';
+  const grounded = shortcut ? null : groundInterpretation(understood.interpretation, guarded.text, { previousReply });
+  const resolved = shortcut ? { interpretation: understood.interpretation, continued: true } : resolvePending(pending, applyHints(grounded.interpretation, hints));
   let { interpretation } = resolved;
   const { continued } = resolved;
+  if (grounded && !interpretation.edits?.length && !interpretation.reorder) {
+    interpretation = lockToMentionedKinds(interpretation, grounded.said);
+    interpretation = continueFind(interpretation, grounded.said, { lastIntent: session ? session.last_intent : context?.last_intent ?? null, previousCriteria, lastKeywords: (session ? session.last_keywords : context?.last_keywords) ?? [] }) ?? interpretation;
+  }
 
   // 1b. Gửi y hệt lần thứ 3 => hỏi lại cần đổi gì (chỉ 1 chỗ / chỗ khác / gần hơn / rẻ hơn) thay vì trả lời y như 2 lần trước
   if (!shortcut && !askedBefore && PLANNING_INTENTS.includes(interpretation.intent) && isRepeatedAsk(guarded.text, recentPrompts)) {
@@ -361,6 +375,7 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
       assumptions: built.assumptions,
       must_visit: built.mustInclude.map((place) => ({ id: place._id, name: place.name })),
       avoided: built.exclude.map((place) => ({ id: place._id, name: place.name })),
+      keywords: built.searchKeywords,
     };
     const tripDate = tripMoment({ date_hint: interpretation.criteria.date_hint, start_time: built.criteria.start_time }, now).date;
 

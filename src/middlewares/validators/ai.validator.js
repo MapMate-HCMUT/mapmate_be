@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AI_BASE_PLAN_SOURCES, AI_DEFAULT_TIER, AI_HISTORY_TURNS, AI_MAX_MUST_VISIT, AI_RECENT_PLACES_MAX, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
+import { AI_BASE_PLAN_SOURCES, AI_DEFAULT_TIER, AI_HISTORY_TURNS, AI_INTENT_VALUES, AI_MAX_MUST_VISIT, AI_RECENT_PLACES_MAX, AI_MEMORY_FACT_KEYS, AI_MODEL_TIERS, AI_PROMPT_MAX_LENGTH, AI_VEHICLE_VALUES } from '../../constants/ai.js';
 import { ITINERARY_MAX_STOPS } from '../../constants/social.js';
 import { PEOPLE_FILTER } from '../../constants/places.js';
 import { objectId, objectIdList, timeOfDay } from './common.validator.js';
@@ -39,6 +39,8 @@ export const aiChatSchema = z.object({
       criteria: tripCriteriaSchema.nullable().optional(),
       must_visit_ids: objectIdList(AI_MAX_MUST_VISIT).optional(),
       recent_place_ids: objectIdList(AI_RECENT_PLACES_MAX).optional(), // nơi vừa gợi ý => lượt sau tránh lặp lại
+      last_intent: z.enum(AI_INTENT_VALUES).nullable().optional(), // lượt trước vừa tìm quán => "dưới 40k đi" là lọc tiếp
+      last_keywords: z.array(z.string().max(60)).max(5).optional(),
       recent_prompts: z.array(z.string().max(AI_PROMPT_MAX_LENGTH)).max(AI_HISTORY_TURNS).optional(), // câu vừa gửi => biết đang hỏi lại y hệt
       // Yêu cầu đang chờ (lượt trước hỏi lại / từ chối) — kiểm tra lại đúng schema của Agent hiểu yêu cầu
       pending: z
