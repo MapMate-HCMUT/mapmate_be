@@ -4,7 +4,8 @@
 import { AI_INTENTS, REQUEST_QUALITY } from '../../constants/ai.js';
 
 // confirm = Agent điều phối nhắc lại ý đã hiểu, chờ "đúng rồi"; edit_target = hỏi sửa điểm nào (lộ trình có 2 bữa chính...)
-export const PENDING_KINDS = { CLARIFY: 'clarify', UNREALISTIC: 'unrealistic', CONFIRM: 'confirm', EDIT_TARGET: 'edit_target' };
+// repeat = người dùng gửi y hệt 1 câu lần thứ 3 => hỏi lại muốn đổi gì thay vì trả lời y như cũ
+export const PENDING_KINDS = { CLARIFY: 'clarify', UNREALISTIC: 'unrealistic', CONFIRM: 'confirm', EDIT_TARGET: 'edit_target', REPEAT: 'repeat' };
 
 // Câu mới sang chủ đề khác => bỏ yêu cầu đang chờ
 const NEW_TOPIC_INTENTS = new Set([AI_INTENTS.ASK_PLACE, AI_INTENTS.OUT_OF_SCOPE, AI_INTENTS.SMALLTALK]);

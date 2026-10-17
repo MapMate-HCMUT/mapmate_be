@@ -306,14 +306,17 @@ const isActive = (value) => (Array.isArray(value) ? value.length > 0 : value != 
  * Nới dần bộ lọc cho tới khi có kết quả: chỉ bỏ những điều kiện ĐANG bật, theo thứ tự PLACE_RELAX_STEPS.
  * @returns {{ result, relaxed: { keys, labels, radius_km? } } | null} null = nới hết vẫn không có
  */
+// options.lockedKeys: điều kiện KHÔNG được nới (AI tìm quán: hỏi cà phê thì không bao giờ trả quán ăn, hỏi "yên tĩnh" thì không trả quán ồn)
 const searchRelaxed = async (filters, userId, options) => {
   const next = { ...filters };
   const relaxed = { keys: [], labels: [] };
+  const locked = new Set(options.lockedKeys ?? []);
+  const stepsOf = (all) => all.filter((step) => !step.keys.some((key) => locked.has(key)));
   // Có từ khoá ("phở hòa") => người dùng tìm đúng quán đó: bỏ 1 lần mọi bộ lọc đang bật (như bấm "Đặt lại bộ lọc"),
   // nới từng bước sẽ dừng ở quán na ná tên ("Cà Phê Phố") trong khi quán thật bị bộ lọc loại hình chặn
   const steps = filters.q
-    ? [PLACE_RELAX_STEPS.filter((step) => !step.widen && step.keys.some((key) => isActive(filters[key]))).reduce((all, step) => ({ keys: [...all.keys, ...step.keys], labels: [...all.labels, step.label] }), { keys: [], labels: [] })]
-    : PLACE_RELAX_STEPS;
+    ? [stepsOf(PLACE_RELAX_STEPS).filter((step) => !step.widen && step.keys.some((key) => isActive(filters[key]))).reduce((all, step) => ({ keys: [...all.keys, ...step.keys], labels: [...all.labels, step.label] }), { keys: [], labels: [] })]
+    : stepsOf(PLACE_RELAX_STEPS);
   for (const step of steps) {
     const widen = step.widen && !filters.q && (filters.radius_km ?? RADIUS_FILTER.default) < RADIUS_FILTER.max;
     if (!widen && (step.widen || !step.keys.some((key) => isActive(filters[key])))) continue;

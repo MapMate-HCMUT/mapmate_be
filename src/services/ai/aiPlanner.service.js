@@ -15,13 +15,15 @@
 //     vẫn trễ => hỏi người dùng muốn bỏ điểm hay đi sớm hơn
 // Chỉ 2 Agent gọi LLM (hiểu yêu cầu, tư vấn); các Agent còn lại là code => không tốn thêm lượt gọi Groq.
 // Groq lỗi / chưa có key ở bước nào => bước đó tự chuyển sang bản dự phòng (luật / mẫu), pipeline vẫn trả kết quả.
-import { AI_DEFAULT_TIER, AI_FIND_PLACES_LIMIT, AI_INTENTS, AI_PLAN_CHECKS, AI_RECENT_PLACES_MAX, AI_RECENT_SUGGESTION_TURNS, AI_TRIP_INTENTS, REQUEST_QUALITY } from '../../constants/ai.js';
+import { AI_DEFAULT_TIER, AI_FIND_PLACES_LIMIT, AI_HISTORY_TURNS, AI_INTENTS, AI_PLAN_CHECKS, AI_RECENT_PLACES_MAX, AI_RECENT_SUGGESTION_TURNS, AI_TRIP_INTENTS, REQUEST_QUALITY } from '../../constants/ai.js';
 import { ERROR_CODES, EXPLORE_ERROR_CODES } from '../../constants/errorCodes.js';
 import { HTTP_STATUS } from '../../constants/httpStatus.js';
-import { DEFAULT_PLACE_SORT } from '../../constants/places.js';
+import { DEFAULT_PLACE_SORT, EXPLORE_CATEGORIES, PLACE_TAGS } from '../../constants/places.js';
 import { nearbyQuerySchema } from '../../middlewares/validators/place.validator.js';
 import { SAFE_ALTERNATIVES, SAFETY_CATEGORIES, SAFETY_REPLIES } from '../../constants/aiSafety.js';
 import { AppError } from '../../utils/AppError.js';
+import { haversineKm } from '../../utils/geo.js';
+import { normalizeSearchText } from '../../utils/text.js';
 import { getWeatherAt } from '../external/weather.service.js';
 import { suggestItineraries } from '../itineraryPlanner.service.js';
 import { searchPlaces, toPlaceView } from '../place.service.js';
@@ -32,11 +34,12 @@ import { questionsFor } from './clarifyQuestions.js';
 import { buildCriteria, MEMORY_NOTE_PREFIX, tripMoment, vietnamNow } from './criteriaBuilder.js';
 import { checkFeasibility } from './feasibility.js';
 import { guardInput } from './inputGuard.js';
+import { continueFind, groundInterpretation, lockToMentionedKinds } from './requestGrounding.js';
 import { basePlanFromItinerary, basePlanFromOption, baseCriteriaOf, describeBasePlan, editPlan, loadBasePlaces, shortenStays } from './editor.agent.js';
 import { interpretRequest } from './interpreter.agent.js';
 import { extractDateHint, extractEndBy, extractTime } from './ruleInterpreter.js';
 import { isLlmConfigured } from './llmClient.js';
-import { ACTIONS, answerPending, CONFIRM_RETRY, confirmTurn, decideAction, memoryOffer, retryReply } from './orchestrator.js';
+import { ACTIONS, answerPending, CONFIRM_RETRY, confirmTurn, decideAction, isRepeatedAsk, memoryOffer, repeatTurn, retryReply } from './orchestrator.js';
 import { planWithRealTransit } from './transit.agent.js';
 import { tradeoffQuestion, verifyOptions } from './verifier.agent.js';
 import { addNote, clearMemory, describeMemory, detectMemoryCommand, learnFromTurn, loadMemory, memorySuggestions } from './memory.service.js';
@@ -47,7 +50,8 @@ import { moderateByRules } from './safety/ruleModeration.js';
 
 const PLANNING_INTENTS = [...AI_TRIP_INTENTS, AI_INTENTS.FIND_PLACES];
 const EMPTY_ADVICE = { reply: '', tips: [], warnings: [], follow_up_suggestions: [] };
-const WEATHER_HINTS = ['now', 'today', 'tonight', 'tomorrow']; // trong ~48 giờ tới => dự báo đủ tin cậy
+const WEATHER_HINTS = ['now', 'today', 'tonight', 'tomorrow'];
+const FIND_POOL_FACTOR = 3; // trong ~48 giờ tới => dự báo đủ tin cậy
 const MINUTES_PER_HOUR = 60;
 const MAX_WARNINGS = 4;
 const MAX_FOLLOW_UPS = 3;
@@ -87,7 +91,9 @@ const retrieve = async ({ intent, built, recentIds = [] }) => {
       return { options: [], places: [], retrievalError: error.message };
     }
   }
-  // Chỉ tìm quán: dùng chung bộ lọc Khám phá, từ khoá đầu tiên ("lẩu") làm ô tìm kiếm
+  // Chỉ tìm quán: dùng chung bộ lọc Khám phá, từ khoá đầu tiên ("lẩu") làm ô tìm kiếm.
+  // Ngân sách / người = giá thấp nhất của quán phải vừa (1 ly cà phê từ 35k vẫn hợp với "40k").
+  const priceCap = Math.min(criteria.price_max ?? Infinity, criteria.trip_budget ?? Infinity);
   const filters = nearbyQuerySchema.parse({
     lat: criteria.origin.lat,
     lng: criteria.origin.lng,
@@ -95,20 +101,47 @@ const retrieve = async ({ intent, built, recentIds = [] }) => {
     categories: criteria.categories.join(',') || undefined,
     tags: criteria.tags.join(',') || undefined,
     price_min: criteria.price_min || undefined,
-    price_max: criteria.price_max ?? undefined,
+    price_max: Number.isFinite(priceCap) ? priceCap : undefined,
     min_rating: criteria.min_rating ?? undefined,
     q: built.keywords[0],
     open_at: criteria.open_only ? criteria.start_time : undefined,
     vehicle: criteria.vehicle,
     sort: DEFAULT_PLACE_SORT,
-    limit: AI_FIND_PLACES_LIMIT,
+    limit: AI_FIND_PLACES_LIMIT * FIND_POOL_FACTOR, // lấy dư => hỏi lại thì đưa quán chưa gợi ý lên trước
     auto_relax: 'true', // không có quán khớp hết điều kiện => nới dần, ghi chú cho người dùng biết
   });
-  const found = await searchPlaces(filters, null, { promote: false }); // AI giữ khách quan: không ưu tiên cửa hàng trả phí
-  if (found.relaxed) built.assumptions.push(`Không có chỗ khớp hết điều kiện — đã tạm bỏ: ${found.relaxed.labels.join(', ')}`);
+  // AI giữ khách quan: không ưu tiên cửa hàng trả phí. Loại hình + phong cách người dùng hỏi KHÔNG bao giờ bị nới:
+  // hỏi cà phê mà không có quán cà phê khớp => trả lời "không có", không nhét quán ăn vào cho đủ danh sách
+  const lockedKeys = ['categories', 'tags', ...(filters.price_max !== undefined ? ['price_min', 'price_max'] : [])]; // có ngân sách => tìm xa hơn chứ không bỏ giá
+  const found = await searchPlaces(filters, null, { promote: false, lockedKeys });
+  if (found.relaxed?.labels.length) built.assumptions.push(`Không có chỗ khớp hết điều kiện — đã tạm bỏ: ${found.relaxed.labels.join(', ')}`);
+  // Món người dùng hỏi phải có trong TÊN / món đặc trưng của quán — ô tìm kiếm so cả địa chỉ ("Lầu 1" bỏ dấu thành "lau" = "lẩu")
+  const keyword = built.keywords[0] ? normalizeSearchText(built.keywords[0]) : null;
+  const servesKeyword = (place) => !keyword || normalizeSearchText([place.name, ...(place.specialties ?? []), ...(place.cuisines ?? [])].join(' ')).includes(keyword);
+  const fits = (place) => (!criteria.categories.length || criteria.categories.includes(place.category)) && (!criteria.tags.length || criteria.tags.some((tag) => place.tags?.includes(tag))) && servesKeyword(place);
   const pinned = mustInclude.map((place) => toPlaceView(place)); // quán người dùng gọi tên => luôn đứng đầu
-  const places = [...pinned, ...found.items.filter((item) => !pinned.some((place) => String(place.id) === String(item.id)))].slice(0, AI_FIND_PLACES_LIMIT);
-  return { options: [], places, retrievalError: places.length ? null : 'Không có địa điểm nào khớp yêu cầu.' };
+  const seen = new Set(recentIds.map(String));
+  const matching = found.items.filter((item) => fits(item) && !pinned.some((place) => String(place.id) === String(item.id)));
+  // Hỏi lại => chỉ đưa quán CHƯA gợi ý; hết quán mới mới đưa lại quán cũ. Khớp được bao nhiêu thì trả bấy nhiêu, không độn cho đủ 6
+  const unseen = matching.filter((item) => !seen.has(String(item.id)));
+  const places = dropDuplicatePlaces([...pinned, ...(unseen.length ? unseen : matching)]).slice(0, AI_FIND_PLACES_LIMIT);
+  return { options: [], places, retrievalError: places.length ? null : noMatchMessage(criteria) };
+};
+
+// Dữ liệu mở hay có 2 bản ghi cho 1 quán ("Chidori Coffee in Bed" + "Chidori Coffee in Bed Sư Vạn Hạnh", cùng địa chỉ) => giữ 1
+const DUPLICATE_RADIUS_KM = 0.2;
+const coreName = (place) => normalizeSearchText(place.name).replace(/\(.*\)/g, '').trim();
+const dropDuplicatePlaces = (places) =>
+  places.filter((place, index) => !places.slice(0, index).some((kept) => {
+    const [a, b] = [coreName(kept), coreName(place)];
+    const near = haversineKm([kept.coordinates.lng, kept.coordinates.lat], [place.coordinates.lng, place.coordinates.lat]) < DUPLICATE_RADIUS_KM;
+    return near && a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a));
+  }));
+
+const labelsOf = (values, vocabulary) => values.map((value) => vocabulary.find((item) => item.value === value)?.label.toLowerCase() ?? value).join(', ');
+const noMatchMessage = ({ categories, tags, radius_km: radiusKm }) => {
+  const what = [categories.length && labelsOf(categories, EXPLORE_CATEGORIES), tags.length && `phong cách ${labelsOf(tags, PLACE_TAGS)}`].filter(Boolean).join(', ');
+  return `Không có chỗ nào ${what ? `đúng ${what} ` : ''}khớp yêu cầu trong khoảng ${radiusKm ?? 'đã chọn'} km.`;
 };
 
 // Từ chối vì vi phạm chính sách: lý do rõ ràng + câu hỏi thay thế (ưu tiên câu hợp sở thích đã ghi nhớ)
@@ -136,7 +169,9 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
   // Nơi vừa gợi ý ở các lượt trước (đã đăng nhập: lấy từ phiên; khách: giao diện gửi kèm)
   const recentIds = session ? recentSuggestedIds(session, AI_RECENT_SUGGESTION_TURNS, AI_RECENT_PLACES_MAX) : context?.recent_place_ids ?? [];
   const pending = (session ? session.pending : context?.pending) ?? null;
-  const askedBefore = [PENDING_KINDS.CLARIFY, PENDING_KINDS.CONFIRM, PENDING_KINDS.EDIT_TARGET].includes(pending?.kind);
+  const askedBefore = [PENDING_KINDS.CLARIFY, PENDING_KINDS.CONFIRM, PENDING_KINDS.EDIT_TARGET, PENDING_KINDS.REPEAT].includes(pending?.kind);
+  // Các câu người dùng vừa gửi (đăng nhập: trong phiên; khách: giao diện gửi kèm) — để biết họ đang hỏi lại y hệt
+  const recentPrompts = session ? session.messages.filter((item) => item.role === 'user').slice(-AI_HISTORY_TURNS).map((item) => item.content) : context?.recent_prompts ?? [];
   const history = toHistory(session);
   const now = vietnamNow();
   const memory = await loadMemory(userId);
@@ -248,9 +283,24 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
   // Bước hiểu yêu cầu cũng tự đánh giá an toàn — phòng khi lớp 2–3 hết hạn mức / lỗi
   if (understood.interpretation.safety_category !== SAFETY_CATEGORIES.NONE) return refuse(understood.interpretation.safety_category);
 
-  const resolved = shortcut ? { interpretation: understood.interpretation, continued: true } : resolvePending(pending, applyHints(understood.interpretation, hints));
+  // 1a. Bám đúng lời người dùng: bỏ món / quận model tự thêm từ ghi nhớ, bỏ món người dùng đang than phiền,
+  //     gọi tên loại chỗ thì chỉ tìm loại đó, lọc tiếp kết quả vừa tìm ("dưới 40k đi") thay vì hỏi lại từ đầu
+  const previousReply = history.findLast((item) => item.role === 'assistant')?.content ?? '';
+  const grounded = shortcut ? null : groundInterpretation(understood.interpretation, guarded.text, { previousReply });
+  const resolved = shortcut ? { interpretation: understood.interpretation, continued: true } : resolvePending(pending, applyHints(grounded.interpretation, hints));
   let { interpretation } = resolved;
   const { continued } = resolved;
+  if (grounded && !interpretation.edits?.length && !interpretation.reorder) {
+    interpretation = lockToMentionedKinds(interpretation, grounded.said);
+    interpretation = continueFind(interpretation, grounded.said, { lastIntent: session ? session.last_intent : context?.last_intent ?? null, previousCriteria, lastKeywords: (session ? session.last_keywords : context?.last_keywords) ?? [] }) ?? interpretation;
+  }
+
+  // 1b. Gửi y hệt lần thứ 3 => hỏi lại cần đổi gì (chỉ 1 chỗ / chỗ khác / gần hơn / rẻ hơn) thay vì trả lời y như 2 lần trước
+  if (!shortcut && !askedBefore && PLANNING_INTENTS.includes(interpretation.intent) && isRepeatedAsk(guarded.text, recentPrompts)) {
+    const repeat = repeatTurn(interpretation);
+    response.intent = interpretation.intent;
+    return ask({ reply: repeat.reply, questions: repeat.questions, pending: repeat.pending, key: 'repeat', detail: { reason: 'same_question' } });
+  }
 
   // 2. Agent điều phối quyết định làm gì
   const decision = decideAction({ interpretation, source: understood.skipped ? 'pending' : understood.source, llmConfigured: isLlmConfigured(), askedBefore, continued, basePlan: basePlaces.length ? basePlan : null, attachedNow, text: guarded.text });
@@ -258,6 +308,9 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
   if (decision.action === ACTIONS.EDIT && interpretation.intent !== AI_INTENTS.REFINE_TRIP) interpretation = { ...interpretation, intent: AI_INTENTS.REFINE_TRIP };
   // "Lộ trình khác đi" => lên lại theo đúng tiêu chí cũ (khu vực, giờ, ngân sách), chỉ đổi địa điểm
   if (decision.reason === 'another_route') interpretation = { ...interpretation, intent: AI_INTENTS.REFINE_TRIP, request_quality: REQUEST_QUALITY.OK };
+  // Chỉ muốn tới 1 chỗ => tìm vài quán đúng loại để chọn, không dựng lộ trình nhiều điểm
+  if (decision.reason === 'single_stop') interpretation = { ...interpretation, intent: AI_INTENTS.FIND_PLACES };
+  if (decision.reason === 'general_outing') interpretation = { ...interpretation, intent: AI_INTENTS.PLAN_TRIP };
   const { intent } = interpretation;
   Object.assign(response, { intent, request_quality: interpretation.request_quality });
   response.flags.continued = continued;
@@ -322,6 +375,7 @@ export const chatWithPlanner = async ({ userId = null, message, sessionId = null
       assumptions: built.assumptions,
       must_visit: built.mustInclude.map((place) => ({ id: place._id, name: place.name })),
       avoided: built.exclude.map((place) => ({ id: place._id, name: place.name })),
+      keywords: built.searchKeywords,
     };
     const tripDate = tripMoment({ date_hint: interpretation.criteria.date_hint, start_time: built.criteria.start_time }, now).date;
 

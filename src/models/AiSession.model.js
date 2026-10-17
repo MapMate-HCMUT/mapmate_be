@@ -58,6 +58,8 @@ const aiSessionSchema = new mongoose.Schema(
     // Các phương án lượt trước (key + điểm) — lượt sau "đổi quán ăn" là sửa phương án người dùng đang xem
     last_options: { type: mongoose.Schema.Types.Mixed, default: null },
     last_intent: { type: String, default: null },
+    // Từ khoá của lượt tìm quán gần nhất ("bún bò") — lượt sau "dưới 40k đi" lọc tiếp đúng món đó
+    last_keywords: { type: [String], default: [] },
     model_tier: { type: String, default: null },
   },
   {

@@ -2,7 +2,14 @@
 import { AI_ERROR_CODES, AI_HISTORY_TURNS, AI_SESSION_LIST_LIMIT, AI_SESSION_TITLE_LENGTH } from '../../constants/ai.js';
 import { HTTP_STATUS } from '../../constants/httpStatus.js';
 import AiSession from '../../models/AiSession.model.js';
+import Place from '../../models/Place.model.js';
 import { AppError } from '../../utils/AppError.js';
+import { toPlaceView } from '../place.service.js';
+
+// Mở lại cuộc trò chuyện phải thấy lại đúng quán / lộ trình AI đã gợi ý => lưu kèm bản đầy đủ (~15 KB / lượt có lộ trình).
+// Chỉ giữ bản đầy đủ cho N lượt gần nhất của 1 phiên (document MongoDB tối đa 16 MB); lượt cũ hơn còn id quán => nạp lại từ DB.
+const SNAPSHOT_TURNS = 30;
+const SNAPSHOT_KEYS = ['options', 'places', 'understood', 'tips', 'warnings', 'follow_up_suggestions', 'trace', 'sources', 'base_plan'];
 
 const sessionNotFound = () => new AppError('Không tìm thấy cuộc trò chuyện', HTTP_STATUS.NOT_FOUND, AI_ERROR_CODES.AI_SESSION_NOT_FOUND);
 
@@ -40,7 +47,7 @@ const toStoredMessage = (response) => ({
   intent: response.intent,
   option_keys: response.options.map((option) => option.key),
   place_ids: response.places.map((place) => String(place.id)),
-  suggested_place_ids: [...new Set(response.options.flatMap((option) => option.place_ids.map(String)))], // để lượt sau tránh gợi ý lại
+  suggested_place_ids: [...new Set([...response.options.flatMap((option) => option.place_ids.map(String)), ...response.places.map((place) => String(place.id))])], // để lượt sau tránh gợi ý lại
   clarifying_questions: response.clarifying_questions,
   refusal: response.refusal,
   place_answer: response.place_answer && {
@@ -50,17 +57,32 @@ const toStoredMessage = (response) => ({
     facts_used: response.place_answer.facts_used,
   },
   weather: response.weather,
+  // Bản đầy đủ để mở lại phiên vẫn thấy quán / lộ trình (bị bỏ bớt khi phiên quá dài — xem SNAPSHOT_TURNS)
+  ...Object.fromEntries(SNAPSHOT_KEYS.map((key) => [key, response[key] ?? null])),
 });
+
+// Lượt AI cũ hơn SNAPSHOT_TURNS => bỏ phần nặng (lộ trình, danh sách quán), giữ lời trả lời + id quán
+const trimOldSnapshots = (doc) => {
+  const models = doc.messages.filter((message) => message.role === 'model');
+  for (const message of models.slice(0, -SNAPSHOT_TURNS)) {
+    const stored = safeParse(message.content);
+    if (!SNAPSHOT_KEYS.some((key) => stored[key] != null)) continue;
+    SNAPSHOT_KEYS.forEach((key) => delete stored[key]);
+    message.content = JSON.stringify(stored);
+  }
+};
 
 // planState: { base_plan, last_options } — undefined = giữ nguyên (lượt chỉ trò chuyện / hỏi lại không làm mất lộ trình đang chỉnh)
 export const persistSession = async ({ session, userId, text, response, tier, planState = {} }) => {
   if (!userId) return null;
   const doc = session ?? new AiSession({ user_id: userId, title: text.slice(0, AI_SESSION_TITLE_LENGTH) });
   doc.messages.push({ role: 'user', content: text }, { role: 'model', content: JSON.stringify(toStoredMessage(response)) });
+  trimOldSnapshots(doc);
   if (response.understood?.criteria) {
     doc.criteria = response.understood.criteria;
     doc.context = { budget: response.understood.criteria.trip_budget ?? 0, vehicle: response.understood.criteria.vehicle }; // Milestone 2: AI_SESSIONS.context
     doc.must_visit_ids = response.understood.must_visit.map((place) => place.id);
+    doc.last_keywords = response.understood.keywords ?? [];
   }
   if (planState.base_plan !== undefined) doc.base_plan = planState.base_plan;
   if (planState.last_options !== undefined) doc.last_options = planState.last_options;
@@ -91,9 +113,24 @@ const safeParse = (content) => {
   }
 };
 
+// Lượt chưa có bản đầy đủ (phiên lưu trước khi có tính năng này / quá cũ) mà còn id quán => nạp lại quán từ DB
+const hydratePlaces = async (messages) => {
+  const missing = messages.filter((message) => message.role === 'model' && !message.places && message.place_ids?.length);
+  const ids = [...new Set(missing.flatMap((message) => message.place_ids))];
+  if (!ids.length) return messages;
+  const places = new Map((await Place.find({ _id: { $in: ids } }).lean()).map((place) => [String(place._id), toPlaceView(place)]));
+  return messages.map((message) => (missing.includes(message) ? { ...message, places: message.place_ids.map((id) => places.get(String(id))).filter(Boolean) } : message));
+};
+
 export const getSession = async (userId, sessionId) => {
   const session = await AiSession.findOne({ _id: sessionId, user_id: userId }).lean();
   if (!session) throw sessionNotFound();
+  const messages = await hydratePlaces(session.messages.map((message) => ({
+    id: message._id,
+    role: message.role,
+    timestamp: message.timestamp,
+    ...(message.role === 'user' ? { content: message.content } : safeParse(message.content)),
+  })));
   return {
     id: session._id,
     title: session.title,
@@ -101,12 +138,7 @@ export const getSession = async (userId, sessionId) => {
     pending: session.pending ?? null,
     created_at: session.created_at,
     updated_at: session.updated_at,
-    messages: session.messages.map((message) => ({
-      id: message._id,
-      role: message.role,
-      timestamp: message.timestamp,
-      ...(message.role === 'user' ? { content: message.content } : safeParse(message.content)),
-    })),
+    messages,
   };
 };
 

@@ -35,7 +35,9 @@ const wantedRoles = (categories) => {
 // Khoảng cách tối thiểu giữa 2 điểm ăn vặt: food tour đi liền tay, chuyến thường thì giãn ra
 export const snackGapMinutes = (foodTour) => (foodTour ? MEAL_RULES.MIN_SNACK_GAP_FOOD_TOUR_MINUTES : MEAL_RULES.MIN_SNACK_GAP_MINUTES);
 
-const isFoodOnly = (categories) => categories?.length > 0 && categories.every((category) => category === 'food' || category === 'cafe');
+// "Chỉ ăn uống" phải có quán ĂN: chỉ chọn cà phê là chuyến đi uống nước — không được tự chèn bữa chính (lỗi cũ: "cà phê chill" ra bún bò)
+const isFoodOnly = (categories) => categories?.includes('food') && categories.every((category) => category === 'food' || category === 'cafe');
+const isCafeOnly = (categories) => categories?.length > 0 && categories.every((category) => category === 'cafe');
 
 const autoStopCount = (durationHours) =>
   Math.min(ITINERARY_MAX_STOPS, Math.max(MIN_STOPS, Math.min(MAX_AUTO_STOPS, Math.round((durationHours * MINUTES_PER_HOUR) / AVG_MINUTES_PER_STOP))));
@@ -103,6 +105,10 @@ const simulateRoles = ({ count, startTime, durationHours = null, wants, meals, f
 const deriveRoles = (criteria) => {
   const wants = wantedRoles(criteria.categories);
   const durationHours = criteria.duration_hours;
+  // Chỉ muốn cà phê / trà sữa: 1 quán (thêm 1 chỗ tráng miệng nếu người dùng nói rõ số điểm) — không thêm quán ăn
+  if (isCafeOnly(criteria.categories) && !criteria.meals?.length && !criteria.food_tour) {
+    return criteria.stop_count > 1 ? [DRINK, SNACK, DRINK].slice(0, criteria.stop_count) : [DRINK];
+  }
   if (durationHours >= MEAL_REQUIRED_HOURS) wants.add(MEAL);
   const count = criteria.stop_count ?? autoStopCount(durationHours);
 
@@ -216,4 +222,4 @@ export const preferredStartForMeals = (meals, sequence = []) => {
 };
 
 // Hình dạng chuyến đi do người dùng quyết định (thứ tự / số điểm / food tour / chỉ ăn uống) => tự ước lượng thời lượng
-export const hasExplicitShape = (criteria) => Boolean(criteria.sequence?.length || criteria.stop_count || criteria.food_tour || isFoodOnly(criteria.categories));
+export const hasExplicitShape = (criteria) => Boolean(criteria.sequence?.length || criteria.stop_count || criteria.food_tour || isFoodOnly(criteria.categories) || isCafeOnly(criteria.categories));

@@ -43,7 +43,7 @@ export const PLACE_SORTS = [
 export const PLACE_SORT_VALUES = PLACE_SORTS.map((sort) => sort.value);
 
 export const PRICE_FILTER = { min: 0, max: 2000000, step: 10000 }; // đ / người / điểm (kéo hết = "2.000k+")
-export const TRIP_BUDGET_FILTER = { min: 50000, max: 2000000, step: 50000, default: 500000 }; // đ / người / cả chuyến
+export const TRIP_BUDGET_FILTER = { min: 20000, max: 2000000, step: 10000, default: 500000 }; // đ / người / cả chuyến (20k = 1 ly cà phê)
 export const RADIUS_FILTER = { min: 1, max: 20, default: 5 }; // km
 export const PEOPLE_FILTER = { min: 1, max: 20, default: 2 };
 export const DURATION_FILTER = { min: 1, max: 12, default: 4 }; // giờ

@@ -136,9 +136,13 @@ const parseContent = (completion) => {
 const describeIssues = (issues) =>
   issues.slice(0, MAX_ISSUES_SHOWN).map((issue) => `${issue.path.join('.') || '(gốc)'}: ${issue.message}`).join('; ');
 
+// Groq gỡ model (VD qwen/qwen3-32b) mà .env vẫn trỏ tới => 404 model_not_found. Chuyển model dự phòng thay vì rơi xuống bộ luật.
+const MODEL_GONE = /model_not_found|model_decommissioned|does not exist/;
+const isModelGone = (error) => [400, 404].includes(error.status) && MODEL_GONE.test(error.message);
+
 /**
  * Gọi 1 Agent và nhận về object đã kiểm tra theo `schema` (Zod).
- * fallbackTier: model của tier này hết hạn mức (429) => thử model của tier dự phòng trước khi báo lỗi
+ * fallbackTier: model của tier này hết hạn mức (429) hoặc không còn tồn tại => thử model của tier dự phòng trước khi báo lỗi
  * (VD model nhanh chỉ có 1.000 token đầu ra / phút — người dùng gõ liên tục là chạm giới hạn).
  * @returns {{ data, model, usage, latencyMs, attempts }}
  */
@@ -146,7 +150,7 @@ export const callStructured = async ({ fallbackTier = null, ...input }) => {
   try {
     return await callStructuredOnce(input);
   } catch (error) {
-    const canFallback = fallbackTier && error instanceof LlmError && error.status === 429 && resolveModelId(fallbackTier) !== resolveModelId(input.tier);
+    const canFallback = fallbackTier && error instanceof LlmError && (error.status === 429 || isModelGone(error)) && resolveModelId(fallbackTier) !== resolveModelId(input.tier);
     if (!canFallback) throw error;
     return callStructuredOnce({ ...input, tier: fallbackTier });
   }
