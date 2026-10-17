@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { placeSearchRateLimiter } from '../middlewares/rateLimiter.js';
-import { getPlace, listFilterOptions, listNearbyPlaces, reportPlace } from '../controllers/place.controller.js';
+import { getPlace, listFilterOptions, listNearbyPlaces, reportPlace, undoReport } from '../controllers/place.controller.js';
 import { optionalAuth, requireAuth } from '../middlewares/auth.middleware.js';
 import { socialWriteRateLimiter } from '../middlewares/rateLimiter.js';
 import { validate } from '../middlewares/validate.middleware.js';
@@ -13,3 +13,4 @@ placeRouter.get('/filter-options', listFilterOptions);
 placeRouter.get('/nearby', optionalAuth, placeSearchRateLimiter, validate({ query: nearbyQuerySchema }), listNearbyPlaces);
 placeRouter.get('/:id', optionalAuth, validate({ params: idParam() }), getPlace);
 placeRouter.post('/:id/reports', requireAuth, socialWriteRateLimiter, validate({ params: idParam(), body: placeReportSchema }), reportPlace);
+placeRouter.delete('/:id/reports', requireAuth, socialWriteRateLimiter, validate({ params: idParam() }), undoReport); // gỡ phiếu của mình

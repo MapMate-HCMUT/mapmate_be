@@ -255,7 +255,10 @@ export const toPlaceView = (place, { pin, report } = {}) => {
   };
   if (place.distance_m !== undefined) view.distance_km = roundTo(place.distance_m / METERS_PER_KM, 2);
   if (pin !== undefined) view.my_pin = pin;
-  if (report !== undefined) view.my_report = report;
+  if (report !== undefined) {
+    view.my_report = report?.type ?? null; // báo cáo của người đang xem (loại lỗi + mô tả tự gõ) — để sửa / hoàn tác
+    view.my_report_note = report?.note ?? null;
+  }
   return view;
 };
 

@@ -1,14 +1,16 @@
 import mongoose from 'mongoose';
-import { PLACE_REPORT_TTL_DAYS, PLACE_REPORT_TYPES } from '../constants/places.js';
+import { PLACE_REPORT_NOTE_MAX_LENGTH, PLACE_REPORT_TTL_DAYS, PLACE_REPORT_TYPES } from '../constants/places.js';
 
 const SECONDS_PER_DAY = 24 * 60 * 60;
 
-// Người dùng báo địa điểm "đã đóng cửa" hoặc "vẫn mở". Mỗi người 1 phiếu / địa điểm (báo lại = đổi phiếu).
+// Người dùng báo lỗi 1 địa điểm: "đã đóng cửa" / "vẫn mở" (tính phiếu => cảnh báo) hoặc sai giờ / giá / vị trí / khác
+// (chỉ để admin sửa). Kèm mô tả tự gõ. Mỗi người 1 báo cáo / địa điểm (báo lại = sửa báo cáo, hoàn tác = xoá).
 const placeReportSchema = new mongoose.Schema(
   {
     place_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Place', required: true },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: { type: String, enum: Object.values(PLACE_REPORT_TYPES), required: true },
+    note: { type: String, trim: true, maxlength: PLACE_REPORT_NOTE_MAX_LENGTH, default: '' }, // người dùng tự mô tả lỗi
   },
   { versionKey: false, collection: 'place_reports', timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } },
 );
