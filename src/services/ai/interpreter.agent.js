@@ -22,8 +22,10 @@ Từ vựng được phép:
 - meals: breakfast (bữa sáng), lunch (bữa trưa), dinner (bữa tối), late_night (ăn khuya)
 
 Quy tắc:
-1. intent: plan_trip = muốn lộ trình / đi chơi / đi ăn; refine_trip = sửa lộ trình đã có ("rẻ hơn", "thêm cà phê", "bỏ quán X");
-   find_places = chỉ hỏi tìm quán / chỗ; ask_place = hỏi về 1 địa điểm CỤ THỂ (giờ mở cửa, giá vé, ở đâu, có gì hay, lịch sử, thời tiết khi đi);
+1. intent: plan_trip = muốn lộ trình NHIỀU điểm / đi chơi cả buổi / nói rõ thứ tự ("ăn tối rồi đi cà phê");
+   refine_trip = sửa lộ trình đã có ("rẻ hơn", "thêm cà phê", "bỏ quán X");
+   find_places = chỉ muốn tới 1 chỗ hoặc 1 loại chỗ ("đi uống cà phê", "tối nay ăn lẩu", "quán cà phê nào gần tôi", "1 chỗ xem phim") —
+   KHÔNG phải lộ trình, chỉ cần gợi ý vài quán đúng loại đó. Chưa rõ loại chỗ ("đi hẹn hò", "cả nhà đi đâu chơi", "đi chơi tối nay") => plan_trip; ask_place = hỏi về 1 địa điểm CỤ THỂ (giờ mở cửa, giá vé, ở đâu, có gì hay, lịch sử, thời tiết khi đi);
    ask_info = hỏi thông tin chung, mẹo; smalltalk = chào hỏi; out_of_scope = không liên quan đi chơi / ăn uống / vui chơi ở TP.HCM (kể cả thành phố khác).
 2. Chỉ điền điều người dùng nói hoặc suy ra chắc chắn; không rõ thì để null hoặc mảng rỗng. KHÔNG tự bịa ngân sách, số người, giờ.
 3. Tiền: "k"/"nghìn" = ×1.000, "tr"/"triệu"/"củ" = ×1.000.000, "1tr2" = 1.200.000. "x/người", "mỗi người" => budget_per_person;
@@ -34,7 +36,8 @@ Quy tắc:
    "tìm chỗ ăn" = 1 bữa chính. Chỉ đặt food_tour = true khi người dùng muốn ăn vặt nhiều món / "food tour" / "ăn hết phố".
 6. sequence: CHỈ điền khi người dùng nói rõ thứ tự ("ăn trưa rồi đi cà phê" => ["meal","drink"]; "đi bảo tàng xong ăn tối" => ["activity","meal"]).
    stop_count: chỉ khi nói rõ số điểm ("2 chỗ", "3 quán").
-7. Món / chủ đề cụ thể (lẩu, ốc, phở, rooftop, acoustic, bảo tàng...) đưa vào keywords, đồng thời thêm category tương ứng.
+7. categories CHỈ gồm loại hình người dùng thật sự muốn: "đi uống cà phê" => ["cafe"] (KHÔNG thêm "food"); "chill", "yên tĩnh", "làm việc" => tags ["yen-tinh"].
+   Món / chủ đề cụ thể (lẩu, ốc, phở, rooftop, acoustic, bảo tàng...) đưa vào keywords, đồng thời thêm category tương ứng.
    KHÔNG đưa tên bữa ("ăn trưa", "bữa tối") hay từ chung ("ăn uống", "cà phê", "đi chơi") vào keywords.
    keywords viết bằng TIẾNG VIỆT đúng như người dùng nói ("bảo tàng", "bia"), không dịch sang tiếng Anh.
    Muốn đi trung tâm thương mại / mall / TTTM => thêm keyword "mall" (tên mall cụ thể như "Vincom Đồng Khởi" đưa vào places_mentioned).

@@ -33,6 +33,8 @@ export const EXPLORE_ERROR_CODES = {
   ITINERARY_NOT_FOUND: 'ITINERARY_NOT_FOUND',
   NO_MATCHING_PLACES: 'NO_MATCHING_PLACES',
   POST_NOT_FOUND: 'POST_NOT_FOUND',
+  TRASH_ITEM_NOT_FOUND: 'TRASH_ITEM_NOT_FOUND',
+  TRASH_RESTORE_BLOCKED: 'TRASH_RESTORE_BLOCKED', // bài chứa ảnh đã bị xoá / đã đủ ảnh / đã đăng lại bài đó lần nữa
   MEDIA_DISABLED: 'MEDIA_DISABLED', // server chưa cấu hình Cloudinary
   MEDIA_INVALID: 'MEDIA_INVALID', // ảnh / video không phải của người đăng, chưa tải xong hoặc vượt giới hạn
   MEDIA_QUOTA: 'MEDIA_QUOTA', // hết lượt tải ảnh / video trong ngày

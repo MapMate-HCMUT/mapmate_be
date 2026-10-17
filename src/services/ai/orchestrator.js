@@ -9,7 +9,9 @@ import { AI_INTENTS, AI_TRIP_INTENTS, REQUEST_QUALITY } from '../../constants/ai
 import { SAFETY_CATEGORIES } from '../../constants/aiSafety.js';
 import { VISIT_ROLE_LABELS } from '../../constants/tripRules.js';
 import { formatVnd } from '../../utils/money.js';
+import { normalizeSearchText } from '../../utils/text.js';
 import { PENDING_KINDS } from './pendingRequest.js';
+import { FIND_WORDS } from './ruleInterpreter.js';
 
 export const ACTIONS = { REFUSE: 'refuse', PLACE: 'place', CHAT: 'chat', CLARIFY: 'clarify', CONFIRM: 'confirm', EDIT: 'edit', PLAN: 'plan' };
 const PLANNING_INTENTS = [...AI_TRIP_INTENTS, AI_INTENTS.FIND_PLACES];
@@ -24,6 +26,27 @@ export const CONFIRM_OPTIONS = ['Đúng rồi, làm luôn', 'Để mình nói r�
 const isTooVague = ({ criteria, places_mentioned: places }) => {
   const hasActivity = criteria.categories.length || criteria.tags.length || criteria.keywords.length || criteria.sequence.length || criteria.meals.length || criteria.food_tour;
   return !hasActivity && !criteria.district && !places.length;
+};
+
+// Chỉ muốn tới 1 chỗ ("đi uống cà phê", "tối nay ăn lẩu", "chỉ cần 1 quán") => gợi ý vài quán để chọn, KHÔNG dựng cả lộ trình
+// (lỗi cũ: hỏi đi cà phê lại nhận lộ trình quán ăn + cà phê). Nói rõ nhiều điểm / lộ trình / thứ tự => vẫn lên lộ trình.
+const ONE_STOP_WORDS = /((?:^|\s)(1|một)\s*(chỗ|quán|nơi|địa điểm|điểm)(\s|$|[,.!?])|chỉ (muốn |cần )?(đi|ghé|tới|đến|uống|ăn))/;
+const MULTI_STOP_WORDS = /(lộ trình|lịch trình|kế hoạch|hành trình|\btour\b|\bplan\b|đi chơi|đi dạo|cả ngày|nửa ngày|cả buổi|\brồi\b|xong|sau đó|nhiều chỗ|vài chỗ|mấy chỗ|\d+\s*(chỗ|điểm|nơi))/;
+export const isSingleStopRequest = ({ criteria, places_mentioned: mentions = [] }, text) => {
+  const lower = text.toLowerCase();
+  if (ONE_STOP_WORDS.test(lower)) return true;
+  if (MULTI_STOP_WORDS.test(lower)) return false;
+  if (criteria.sequence.length > 1 || criteria.meals.length > 1 || criteria.food_tour || (criteria.stop_count ?? 1) > 1 || criteria.duration_hours) return false;
+  if (mentions.filter((mention) => mention.role === 'must_visit').length > 1) return false;
+  return criteria.categories.length === 1 || (!criteria.categories.length && criteria.keywords.length === 1);
+};
+
+// Model xếp "tối nay đi hẹn hò" / "nhóm 5 đứa đi chơi đêm ăn ốc" vào tìm quán => đó là đi chơi, lên lộ trình
+// (trừ khi câu hỏi rõ "quán nào", "ở đâu")
+const isGeneralOuting = ({ criteria }, text) => {
+  const lower = text.toLowerCase();
+  if (FIND_WORDS.test(lower) || ONE_STOP_WORDS.test(lower)) return false;
+  return MULTI_STOP_WORDS.test(lower) || (!criteria.categories.length && !criteria.keywords.length);
 };
 
 // Có cần sửa lộ trình gốc (thay vì lên lộ trình mới)?
@@ -57,6 +80,10 @@ export const decideAction = ({ interpretation, source, llmConfigured, askedBefor
   if (llmConfigured && source === 'rules' && !askedBefore && !continued && text.trim().length >= CONFIRM_MIN_LENGTH) {
     return { action: ACTIONS.CONFIRM, reason: 'low_confidence' };
   }
+  // Người dùng vừa tự chọn "chỉ 1 chỗ" / "lộ trình nhiều điểm" => giữ đúng lựa chọn đó
+  const free = !edit && !interpretation.locked_intent;
+  if (free && interpretation.intent === AI_INTENTS.PLAN_TRIP && isSingleStopRequest(interpretation, text)) return { action: ACTIONS.PLAN, reason: 'single_stop' };
+  if (free && interpretation.intent === AI_INTENTS.FIND_PLACES && isGeneralOuting(interpretation, text)) return { action: ACTIONS.PLAN, reason: 'general_outing' };
   return { action: edit ? ACTIONS.EDIT : ACTIONS.PLAN, reason: edit ? (attachedNow ? 'attached_plan' : 'refine_plan') : interpretation.intent };
 };
 
@@ -105,6 +132,10 @@ export const answerPending = (pending, text) => {
   if (pending?.kind === PENDING_KINDS.CONFIRM && CONFIRM_YES.test(text) && !CONFIRM_RETRY.test(text)) {
     return { interpretation: pending.interpretation, source: 'pending' };
   }
+  if (pending?.kind === PENDING_KINDS.REPEAT) {
+    const chosen = Object.values(REPEAT_OPTIONS).find((option) => option.toLowerCase() === text.trim().toLowerCase());
+    return chosen ? { interpretation: adjustForRepeat(pending.interpretation, chosen), source: 'pending' } : null;
+  }
   if (pending?.kind === PENDING_KINDS.EDIT_TARGET) {
     const chosen = pending.options?.find((name) => name.toLowerCase() === text.trim().toLowerCase());
     if (!chosen) return null;
@@ -112,6 +143,39 @@ export const answerPending = (pending, text) => {
     return { interpretation: { ...pending.interpretation, edits }, source: 'pending' };
   }
   return null;
+};
+
+// ── Gửi y hệt 1 câu nhiều lần: trả lời cứng y như cũ thì người dùng bực => lần thứ 3 hỏi lại xem cần đổi gì ──
+const REPEAT_THRESHOLD = 2; // số lần đã hỏi y hệt TRƯỚC lượt này
+const REPEAT_NEAR_RADIUS_KM = 2;
+const REPEAT_CHEAPER_FACTOR = 0.7;
+const askKey = (text) => normalizeSearchText(text).replace(/[^a-z0-9]+/g, ' ').trim();
+export const isRepeatedAsk = (text, recentPrompts = []) => {
+  const key = askKey(text);
+  if (!key || ANOTHER_ROUTE.test(text.toLowerCase())) return false; // bấm "gợi ý khác" nhiều lần là cố ý
+  return recentPrompts.filter((prompt) => askKey(prompt) === key).length >= REPEAT_THRESHOLD;
+};
+export const REPEAT_OPTIONS = { ONE: 'Chỉ cần 1 chỗ thôi', TRIP: 'Lên lộ trình nhiều điểm', OTHER: 'Gợi ý chỗ khác', NEAR: 'Gần mình hơn', CHEAP: 'Rẻ hơn' };
+export const repeatTurn = (interpretation) => {
+  const question = 'Bạn hỏi câu này mấy lần rồi — chắc kết quả trước chưa đúng ý. Bạn muốn mình đổi gì?';
+  const shape = interpretation.intent === AI_INTENTS.FIND_PLACES ? REPEAT_OPTIONS.TRIP : REPEAT_OPTIONS.ONE;
+  return {
+    reply: `${question} Hoặc bạn nói rõ thêm (khu vực, giá, kiểu quán) nhé.`,
+    questions: [{ question, options: [shape, REPEAT_OPTIONS.OTHER, REPEAT_OPTIONS.NEAR, REPEAT_OPTIONS.CHEAP] }],
+    pending: { kind: PENDING_KINDS.REPEAT, interpretation },
+  };
+};
+const adjustForRepeat = (interpretation, chosen) => {
+  const criteria = { ...interpretation.criteria };
+  let { intent } = interpretation;
+  if (chosen === REPEAT_OPTIONS.ONE) intent = AI_INTENTS.FIND_PLACES;
+  if (chosen === REPEAT_OPTIONS.TRIP) intent = AI_INTENTS.PLAN_TRIP;
+  if (chosen === REPEAT_OPTIONS.NEAR) criteria.radius_km = REPEAT_NEAR_RADIUS_KM;
+  if (chosen === REPEAT_OPTIONS.CHEAP) {
+    criteria.price_level = 'cheap';
+    if (criteria.budget_per_person) criteria.budget_per_person = Math.round(criteria.budget_per_person * REPEAT_CHEAPER_FACTOR);
+  }
+  return { ...interpretation, intent, criteria, locked_intent: chosen === REPEAT_OPTIONS.ONE || chosen === REPEAT_OPTIONS.TRIP };
 };
 
 export const retryReply = () => ({

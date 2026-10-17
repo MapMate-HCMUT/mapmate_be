@@ -48,6 +48,16 @@ export const MEDIA_USAGE_GUARD = {
   VIDEO_OFF_PERCENT: 80, // dùng ≥ 80% => tạm ngưng đăng video (video tốn hạn mức nhất)
   ALL_OFF_PERCENT: 90, // dùng ≥ 90% => tạm ngưng mọi ảnh / video, để dành phần còn lại cho ảnh đã đăng hiển thị
 };
+// Thùng rác: bài viết + ảnh / video bị bỏ khi chỉnh bài nằm đây 30 ngày (khôi phục được), quá hạn => xoá hẳn (cả file Cloudinary)
+export const TRASH_KINDS = { POST: 'post', MEDIA: 'media' };
+export const TRASH = {
+  RETENTION_DAYS: 30,
+  LIST_LIMIT: 200,
+  PURGE_BATCH: 100,
+  PURGE_INTERVAL_MS: 60 * 60 * 1000,
+  PURGE_FIRST_DELAY_MS: 2 * 60 * 1000,
+};
+
 export const MEDIA_UPLOAD_STATUS = { PENDING: 'pending', ATTACHED: 'attached', DELETED: 'deleted' };
 export const MEDIA_TYPES = ['image', 'video'];
 export const SHARE_MAX_RECIPIENTS = 20;

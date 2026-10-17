@@ -39,8 +39,8 @@ export const create = asyncHandler(async (req, res) => {
 });
 
 export const remove = asyncHandler(async (req, res) => {
-  await deletePost(req.user.id, req.validated.params.id);
-  return sendSuccess(res, { message: 'Đã xoá bài viết' });
+  const data = await deletePost(req.user.id, req.validated.params.id);
+  return sendSuccess(res, { data, message: 'Đã chuyển bài viết vào thùng rác' });
 });
 
 export const like = asyncHandler(async (req, res) => sendSuccess(res, { data: await likePost(req.user.id, req.validated.params.id) }));

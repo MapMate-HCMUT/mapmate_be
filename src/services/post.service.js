@@ -11,12 +11,15 @@ import {
   TRENDING_TAGS_CACHE_TTL_MS,
   TRENDING_TAGS_LIMIT,
   TRENDING_TAGS_WINDOW_DAYS,
+  TRASH,
+  TRASH_KINDS,
 } from '../constants/social.js';
 import Place from '../models/Place.model.js';
 import { PlacePin } from '../models/placePin.model.js';
 import { Post } from '../models/post.model.js';
 import { PostComment } from '../models/postComment.model.js';
 import { PostLike } from '../models/postLike.model.js';
+import { TrashItem } from '../models/trashItem.model.js';
 import { User } from '../models/user.model.js';
 import { AppError } from '../utils/AppError.js';
 import { createMemoryCache } from '../utils/memoryCache.js';
@@ -24,13 +27,15 @@ import { toUserCard, USER_CARD_SELECT } from '../utils/userCard.js';
 import { areFriends, getFriendIds } from './friend.service.js';
 import { ensureItineraryShareable, toItineraryView } from './itinerary.service.js';
 import { notifyUser } from './notification.service.js';
-import { attachMedia, deleteMedia, toMediaView, verifyPostMedia } from './media.service.js';
+import { attachMedia, toMediaView, verifyPostMedia } from './media.service.js';
 import { toPlaceView } from './place.service.js';
 
 const DUPLICATE_KEY_ERROR = 11000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const { PUBLIC, FRIENDS } = POST_VISIBILITY;
 const trendingCache = createMemoryCache(TRENDING_TAGS_CACHE_TTL_MS);
+export const clearTrendingCache = () => trendingCache.clear();
+export const trashExpiry = (from = new Date()) => new Date(from.getTime() + TRASH.RETENTION_DAYS * DAY_MS);
 
 const fail = (message, status, code) => new AppError(message, status, code);
 const postNotFound = () => fail('Không tìm thấy bài viết', HTTP_STATUS.NOT_FOUND, EXPLORE_ERROR_CODES.POST_NOT_FOUND);
@@ -207,7 +212,8 @@ export const undoRepost = async (userId, postId) => {
 
 // ── Chỉnh sửa (chỉ tác giả) ──
 // Sửa được: nội dung, hashtag, quyền xem, số sao + "đã đến đây" (bài địa điểm), ảnh / video. Không đổi loại bài / địa điểm / lộ trình.
-// Bài đăng lại: chỉ sửa lời bình. Ảnh / video: file cũ giữ nguyên, file mới phải là file vừa tải lên, file bị bỏ => xoá trên Cloudinary.
+// Bài đăng lại: chỉ sửa lời bình. Ảnh / video: file cũ giữ nguyên, file mới phải là file vừa tải lên, file bị bỏ => vào thùng rác
+// (khôi phục được trong 30 ngày, quá hạn mới xoá trên Cloudinary).
 export const updatePost = async (userId, postId, input) => {
   const post = await Post.findOne({ _id: postId, author_id: userId }).lean();
   if (!post) throw postNotFound();
@@ -251,7 +257,10 @@ export const updatePost = async (userId, postId, input) => {
   changes.edited_at = new Date();
   await Post.updateOne({ _id: postId }, { $set: changes });
   await attachMedia(post._id, addedMedia);
-  await deleteMedia(removedMedia);
+  if (removedMedia.length) {
+    const expiresAt = trashExpiry();
+    await TrashItem.insertMany(removedMedia.map((media) => ({ user_id: userId, kind: TRASH_KINDS.MEDIA, post_id: post._id, media, expires_at: expiresAt })));
+  }
   if (post.type === POST_TYPES.PLACE && (changes.rating !== undefined || changes.visited)) {
     if (changes.visited && !post.visited) {
       await PlacePin.updateOne(
@@ -266,18 +275,21 @@ export const updatePost = async (userId, postId, input) => {
   return loadPostView(postId, userId);
 };
 
+// Xoá = chuyển vào thùng rác (bản chụp nguyên vẹn). Lượt thích, bình luận, bài đăng lại của người khác vẫn giữ
+// (bài đăng lại hiện "bài gốc đã bị xoá") — khôi phục là trở lại như cũ; quá 30 ngày mới xoá hẳn (trash.service).
 export const deletePost = async (userId, postId) => {
-  const post = await Post.findOneAndDelete({ _id: postId, author_id: userId });
+  const post = await Post.findOneAndDelete({ _id: postId, author_id: userId }).lean();
   if (!post) throw postNotFound();
-  if (post.repost_of) {
-    await Post.updateOne({ _id: post.repost_of, repost_count: { $gt: 0 } }, { $inc: { repost_count: -1 } });
-  } else {
-    await Post.deleteMany({ repost_of: postId }); // xoá bài gốc => xoá luôn các bài đăng lại của nó
-  }
-  await Promise.all([PostLike.deleteMany({ post_id: postId }), PostComment.deleteMany({ post_id: postId })]);
+  const trashed = await TrashItem.create({ user_id: userId, kind: TRASH_KINDS.POST, post_id: post._id, post, expires_at: trashExpiry() });
+  if (post.repost_of) await Post.updateOne({ _id: post.repost_of, repost_count: { $gt: 0 } }, { $inc: { repost_count: -1 } });
   if (post.place_id && post.rating) await refreshCommunityRating(post.place_id);
   trendingCache.clear();
-  await deleteMedia(post.media);
+  return { trash_id: trashed._id, expires_at: trashed.expires_at };
+};
+
+/** Xoá vĩnh viễn dữ liệu đi kèm 1 bài (bài đã nằm trong thùng rác quá hạn / người dùng xoá hẳn) */
+export const purgePostRelations = async (postId) => {
+  await Promise.all([PostLike.deleteMany({ post_id: postId }), PostComment.deleteMany({ post_id: postId }), Post.deleteMany({ repost_of: postId })]);
 };
 
 // ── Thích ──

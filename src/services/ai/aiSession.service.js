@@ -40,7 +40,7 @@ const toStoredMessage = (response) => ({
   intent: response.intent,
   option_keys: response.options.map((option) => option.key),
   place_ids: response.places.map((place) => String(place.id)),
-  suggested_place_ids: [...new Set(response.options.flatMap((option) => option.place_ids.map(String)))], // để lượt sau tránh gợi ý lại
+  suggested_place_ids: [...new Set([...response.options.flatMap((option) => option.place_ids.map(String)), ...response.places.map((place) => String(place.id))])], // để lượt sau tránh gợi ý lại
   clarifying_questions: response.clarifying_questions,
   refusal: response.refusal,
   place_answer: response.place_answer && {

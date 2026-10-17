@@ -17,3 +17,4 @@ export { Business } from './business.model.js';
 export { BusinessStat } from './businessStat.model.js';
 export { Promotion } from './promotion.model.js';
 export { VoucherClaim } from './voucherClaim.model.js';
+export { TrashItem } from './trashItem.model.js';

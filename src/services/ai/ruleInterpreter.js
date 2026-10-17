@@ -16,8 +16,9 @@ const MILLION = 1000000;
 const NOON = 12;
 
 // Từ khoá -> loại hình / phong cách / phương tiện (so trên chữ thường CÒN DẤU để phân biệt "phở" với "phố")
+// "quán" đứng một mình không phải quán ĂN ("quán cà phê nào gần tôi") => chỉ "quán ăn" mới tính là ăn uống
 const CATEGORY_WORDS = {
-  food: ['ăn', 'quán', 'nhà hàng', 'lẩu', 'ốc', 'phở', 'bún', 'cơm', 'bánh mì', 'hải sản', 'nướng', 'buffet', 'đói', 'ăn tối', 'ăn trưa', 'ăn sáng', 'ăn vặt'],
+  food: ['ăn', 'quán ăn', 'nhà hàng', 'lẩu', 'ốc', 'phở', 'bún', 'cơm', 'bánh mì', 'hải sản', 'nướng', 'buffet', 'đói', 'ăn tối', 'ăn trưa', 'ăn sáng', 'ăn vặt'],
   cafe: ['cà phê', 'cafe', 'cafê', 'coffee', 'cf', 'trà sữa', 'trà', 'kem', 'chè', 'sinh tố'],
   attraction: ['tham quan', 'bảo tàng', 'chùa', 'nhà thờ', 'di tích', 'check-in', 'check in', 'ngắm cảnh', 'tượng đài', 'hoàng hôn', 'ngắm'],
   entertainment: ['xem phim', 'rạp', 'karaoke', 'bar', 'pub', 'bia', 'nhậu', 'acoustic', 'nhạc sống', 'game', 'bowling', 'giải trí'],
@@ -42,7 +43,7 @@ const VEHICLE_WORDS = { bike: ['xe máy', 'xe may', 'honda'], car: ['ô tô', 'x
 const DISH_WORDS = ['lẩu', 'ốc', 'phở', 'bún bò', 'bún đậu', 'cơm tấm', 'bánh mì', 'hải sản', 'nướng', 'bbq', 'chay', 'sushi', 'pizza', 'trà sữa', 'bánh xèo', 'hủ tiếu', 'dimsum', 'rooftop', 'acoustic', 'buffet'];
 const PART_OF_DAY = { sáng: '08:00', trưa: '11:30', chiều: '14:30', tối: '18:30', đêm: '20:30', khuya: '21:30' };
 const REFINE_WORDS = /(rẻ hơn|đắt hơn|gần hơn|xa hơn|sớm hơn|muộn hơn|trễ hơn|thêm|bớt|bỏ|đổi|thay|ít hơn|nhiều hơn|khác đi|cái khác)/;
-const FIND_WORDS = /((quán|chỗ|nơi|tiệm)(\s+\S+){0,3}\s+nào|ở đâu|tìm (giúp|cho|quán|chỗ)|gợi ý (vài|mấy|1|một) ?(quán|chỗ|nơi)|có quán)/;
+export const FIND_WORDS = /((quán|chỗ|nơi|tiệm)(\s+\S+){0,3}\s+nào|ở đâu|tìm (giúp|cho|quán|chỗ)|gợi ý (vài|mấy|1|một) ?(quán|chỗ|nơi)|có quán)/;
 const PLAN_WORDS = /(lộ trình|lịch trình|kế hoạch|đi chơi|đi đâu|tour|hành trình|plan)/;
 const SMALLTALK = /^(xin chào|chào|hi|hello|hey|alo|cảm ơn|cám ơn|thanks?|ok|oke)\b/;
 const SMALLTALK_MAX_LENGTH = 30;

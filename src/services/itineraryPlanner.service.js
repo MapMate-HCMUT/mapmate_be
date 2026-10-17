@@ -66,6 +66,10 @@ const effectiveRating = (place) => (place.review_count > 0 || place.rating > 0 ?
 const isUnrated = (place) => !(effectiveRating(place) > 0);
 
 const avgPrice = (place) => (place.price_range.min + place.price_range.max) / 2;
+// Giá thấp nhất (món / ly rẻ nhất) — quán có giá từ 35k vẫn đi được với 40k, dù trung bình quán là 55k
+const minPrice = (place) => place.price_range.min ?? avgPrice(place);
+// Số tiền dự tính chi ở 1 quán khi có giới hạn: gọi món vừa phần tiền còn lại, nhưng không dưới giá thấp nhất của quán
+const plannedSpend = (place, cap) => Math.max(minPrice(place), Math.min(avgPrice(place), cap));
 
 /**
  * Mỗi chiến lược là 1 bộ trọng số trên 4 tiêu chí đã chuẩn hoá về 0–1 => từ cùng 1 bộ lọc ra nhiều lộ trình khác nhau.
@@ -172,7 +176,7 @@ const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories,
   };
   const targetMeals = []; // bữa dự định của từng điểm đã chọn (để chờ đúng giờ ăn)
   const usedIds = new Set(slots.filter((slot) => slot.fixed).map((slot) => String(slot.fixed._id)));
-  let spent = slots.reduce((sum, slot) => sum + (slot.fixed ? avgPrice(slot.fixed) : 0), 0);
+  let spent = slots.reduce((sum, slot) => sum + (slot.fixed ? (tripBudget == null ? avgPrice(slot.fixed) : minPrice(slot.fixed)) : 0), 0);
   let previous = origin;
   let previousPlace = null;
   // Cùng mall với điểm trước ("ăn luôn trong Vincom") / thuộc mall của chuyến đi mall => ưu tiên
@@ -193,7 +197,7 @@ const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories,
     // Chuyến đi mall: điểm vui chơi thêm phải ở TRONG mall (rạp, khu trò chơi) — không có thì bỏ, dạo mall lâu hơn
     const insideOnly = venueId && slot.role === VISIT_ROLES.ACTIVITY;
     const matches = ranked
-      .filter((place) => !usedIds.has(String(place._id)) && place.role === slot.role && allowed.includes(place.category) && avgPrice(place) <= Math.min(share, tripBudget == null ? Infinity : tripBudget - spent))
+      .filter((place) => !usedIds.has(String(place._id)) && place.role === slot.role && allowed.includes(place.category) && minPrice(place) <= Math.min(share, tripBudget == null ? Infinity : tripBudget - spent))
       .filter((place) => !insideOnly || venueOf(place)?.id === venueId)
       .sort((a, b) => venueBonus(b) - venueBonus(a)) // điểm trong mall vào vòng xét trước (giữ thứ tự chiến lược trong từng nhóm)
       .slice(0, LEG_LOOKAHEAD);
@@ -212,7 +216,7 @@ const fillSlots = (slots, ranked, { strategy, score, tripBudget, userCategories,
     chosen.push(pick);
     targetMeals.push(slot.meal);
     usedIds.add(String(pick._id));
-    spent += avgPrice(pick);
+    spent += tripBudget == null ? avgPrice(pick) : plannedSpend(pick, Math.min(share, tripBudget - spent));
     previous = pick.location.coordinates;
     previousPlace = pick;
   });
@@ -349,6 +353,7 @@ export const buildPlan = (orderedPlaces, planInput, { targetMeals = [], stayOver
     built = stretched;
   }
   const { stops, endTime: clock } = built;
+  if (tripBudget != null) fitCostsToBudget(stops, tripBudget);
 
   const sum = (pick) => stops.reduce((total, stop) => total + pick(stop), 0);
   const travelMinutes = sum((stop) => stop.travel_minutes);
@@ -389,6 +394,23 @@ export const buildPlan = (orderedPlaces, planInput, { targetMeals = [], stayOver
   };
 
   return { stops, place_ids: orderedPlaces.map((place) => place._id), summary };
+};
+
+// Có ngân sách mà giá trung bình các quán cộng lại vượt => tính theo mức gọi vừa túi tiền (hạ dần về giá thấp nhất của
+// từng quán, quán nào chênh nhiều thì hạ nhiều). Vẫn vượt khi đã về giá thấp nhất => giữ, bộ kiểm tra báo "vượt ngân sách".
+const fitCostsToBudget = (stops, tripBudget) => {
+  const placesBudget = tripBudget - stops.reduce((total, stop) => total + stop.travel.cost_per_person, 0);
+  const over = stops.reduce((total, stop) => total + stop.est_cost, 0) - placesBudget;
+  const room = (stop) => Math.max(0, stop.est_cost - (stop.place.price_range?.min ?? stop.est_cost));
+  const capacity = stops.reduce((total, stop) => total + room(stop), 0);
+  if (over <= 0 || capacity <= 0) return;
+  const ratio = Math.min(1, over / capacity);
+  for (const stop of stops) {
+    const cut = Math.ceil(room(stop) * ratio);
+    if (!cut) continue;
+    stop.est_cost -= cut;
+    stop.cost_fitted = true; // chi phí theo mức vừa ngân sách (không phải giá trung bình của quán)
+  }
 };
 
 // Các thông số dựng lịch trình lấy từ bộ tiêu chí chuyến đi.

@@ -119,3 +119,18 @@ describe('đa dạng lộ trình', () => {
     }
   });
 });
+
+describe('ngân sách — tính theo mức gọi vừa túi tiền', () => {
+  it('quán cà phê 35k–75k với ngân sách 40k: không bị báo vượt (lỗi cũ: tính giá trung bình 55k)', () => {
+    const cafe = { ...place('Cà phê 35k', { east: 0.2, category: 'cafe', kind: 'coffee' }), price_range: { min: 35000, max: 75000 } };
+    const { stops, summary } = buildPlan([cafe], planInput({ vehicle: 'walk', trip_budget: 40000, duration_hours: 2 }));
+    assert.ok(stops[0].est_cost >= 35000 && stops[0].est_cost <= 40000, `est_cost=${stops[0].est_cost}`);
+    assert.equal(summary.within_budget, true);
+  });
+  it('giá thấp nhất vẫn vượt => giữ giá thấp nhất, báo vượt ngân sách', () => {
+    const cafe = { ...place('Cà phê 60k', { east: 0.2, category: 'cafe', kind: 'coffee' }), price_range: { min: 60000, max: 90000 } };
+    const { stops, summary } = buildPlan([cafe], planInput({ vehicle: 'walk', trip_budget: 40000, duration_hours: 2 }));
+    assert.equal(stops[0].est_cost, 60000);
+    assert.equal(summary.within_budget, false);
+  });
+});
